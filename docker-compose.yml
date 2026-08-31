@@ -1,0 +1,26 @@
+services:
+  arturo-backend:
+    build: ./backend
+    container_name: arturo-backend
+    restart: unless-stopped
+    environment:
+      TZ: America/New_York
+      ARTURO_DB: /data/arturo.db
+    volumes:
+      # Bind mount to a real local path — never an overlay layer or network mount (WAL).
+      - ./backend/data:/data
+    # Not published to the host: only the frontend can reach it.
+    expose:
+      - "8000"
+
+  arturo-frontend:
+    build: ./frontend
+    container_name: arturo-frontend
+    restart: unless-stopped
+    environment:
+      # Server-side proxy target for /api and /health rewrites.
+      API_PROXY_TARGET: http://arturo-backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - arturo-backend

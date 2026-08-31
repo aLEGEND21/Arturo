@@ -1,0 +1,17 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# SQLite data — live user data plus WAL/SHM sidecars, never committed
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+
+# OS
+.DS_Store
