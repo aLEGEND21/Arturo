@@ -7,6 +7,17 @@ export function revalidateAll() {
   swrMutate((key) => typeof key === "string" && key.startsWith("/api/"));
 }
 
+// Optimistically patch one task in every cached task list, without refetching.
+// Used for live-preview edits (e.g. typing a note) before the PATCH lands.
+export function patchTaskCache(id: number, fields: Partial<Task>) {
+  swrMutate(
+    (key) => typeof key === "string" && key.startsWith("/api/tasks?"),
+    (curr: Task[] | undefined) =>
+      curr ? curr.map((t) => (t.id === id ? { ...t, ...fields } : t)) : curr,
+    { revalidate: false }
+  );
+}
+
 export type Effort = "short" | "medium" | "long";
 export type TaskState =
   | "not_started"

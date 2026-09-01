@@ -10,6 +10,7 @@ import {
   api,
   fetcher,
   fmtDue,
+  patchTaskCache,
   revalidateAll,
 } from "@/lib/api";
 import { Blueprint, CheckIcon, CloseIcon, Seg } from "./industry";
@@ -52,8 +53,17 @@ export function TaskDrawer({
 }) {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  // Typing live-patches task.notes in the list caches, so the last value
+  // actually persisted to the server has to be tracked separately.
+  const [savedNotes, setSavedNotes] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const dueInputRef = useRef<HTMLInputElement>(null);
+  // Notes save on blur; Escape closes without blurring, so the key handler
+  // needs the latest draft to flush it.
+  const notesRef = useRef(notes);
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
 
   // Reset form state when a different task opens (render-time adjustment,
   // per react.dev "you might not need an effect").
@@ -61,6 +71,7 @@ export function TaskDrawer({
     setEditingId(task.id);
     setTitle(task.title);
     setNotes(task.notes ?? "");
+    setSavedNotes(task.notes ?? "");
   } else if (!task && editingId !== null) {
     setEditingId(null);
   }
@@ -71,12 +82,22 @@ export function TaskDrawer({
   );
 
   useEffect(() => {
+    if (!task) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape" || !task) return;
+      const draft = notesRef.current;
+      if (draft !== savedNotes) {
+        api(`/api/tasks/${task.id}`, "PATCH", { notes: draft || null })
+          .then(() => revalidateAll())
+          .catch((err) =>
+            toast.error(err instanceof Error ? err.message : "Update failed")
+          );
+      }
+      onClose();
     }
-    if (task) window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [task, onClose]);
+  }, [task, onClose, savedNotes]);
 
   if (!task) return null;
 
@@ -188,21 +209,42 @@ export function TaskDrawer({
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="field">
-            <label>State</label>
-            <Seg
-              name="drawer-state"
-              value={task.state}
-              onChange={(v) => patch({ state: v })}
-              stretch
-              options={[
-                { value: "not_started", label: "Not started" },
-                { value: "in_progress", label: "In progress" },
-                { value: "done", label: "Done" },
-              ]}
-            />
+          {/* Recurring tasks reset daily: no due date, so state + effort share a row. */}
+          <div style={{ display: task.recurring ? "flex" : "contents", gap: 14 }}>
+            <div className="field" style={task.recurring ? { flex: 1 } : undefined}>
+              <label>State</label>
+              <Seg
+                name="drawer-state"
+                value={task.state}
+                onChange={(v) => patch({ state: v })}
+                stretch
+                options={[
+                  { value: "not_started", label: "Not started" },
+                  { value: "in_progress", label: "In progress" },
+                  { value: "done", label: "Done" },
+                ]}
+              />
+            </div>
+            {task.recurring ? (
+              <div className="field" style={{ flex: 1 }}>
+                <label>Effort</label>
+                <Seg
+                  name="drawer-effort"
+                  value={(task.effort ?? "") as Effort}
+                  onChange={(v) => patch({ effort: v })}
+                  onDeselect={() => patch({ effort: null })}
+                  stretch
+                  options={[
+                    { value: "short", label: "Short" },
+                    { value: "medium", label: "Medium" },
+                    { value: "long", label: "Long" },
+                  ]}
+                />
+              </div>
+            ) : null}
           </div>
 
+          {!task.recurring ? (
           <div style={{ display: "flex", gap: 14 }}>
             <div className="field" style={{ flex: 1 }}>
               <label>Due</label>
@@ -270,6 +312,7 @@ export function TaskDrawer({
               />
             </div>
           </div>
+          ) : null}
 
           <div className="field">
             <label>Notes — task content</label>
@@ -277,9 +320,15 @@ export function TaskDrawer({
               className="input"
               style={{ minHeight: 56 }}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                patchTaskCache(task.id, { notes: e.target.value || null });
+              }}
               onBlur={() => {
-                if (notes !== (task.notes ?? "")) patch({ notes: notes || null });
+                if (notes !== savedNotes) {
+                  patch({ notes: notes || null });
+                  setSavedNotes(notes);
+                }
               }}
             />
           </div>

@@ -23,23 +23,22 @@ import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
 import { EffortDot } from "./effort-dot";
 import { Blueprint, ClockIcon, DragDots, FlameIcon, Square } from "./industry";
 
-function subline(task: Task): React.ReactNode {
-  if (task.state === "done" && task.completed_at) {
-    return `Done ${fmtTime(task.completed_at)}`;
-  }
+function subline(task: Task): string {
   const parts: string[] = [];
-  if (deadlineTone(task.deadline) === "overdue") {
-    parts.push(`was due ${fmtDue(task.deadline, true)}`);
-  } else if (task.deadline) {
-    parts.push(`Due ${fmtDue(task.deadline, true)}`);
+  if (task.state === "done" && task.completed_at) {
+    parts.push(`Done ${fmtTime(task.completed_at)}`);
+  } else {
+    if (task.commitment_at) {
+      parts.push(`Committed: ${fmtDue(task.commitment_at)}`);
+    }
+    if (task.last_user_update) {
+      parts.push(`“${task.last_user_update}”`);
+    }
   }
-  if (task.commitment_at) {
-    parts.push(`Committed: ${fmtDue(task.commitment_at)}`);
+  if (task.notes) {
+    parts.push(task.notes.replace(/\s+/g, " ").trim());
   }
-  if (task.last_user_update) {
-    parts.push(`“${task.last_user_update}”`);
-  }
-  return parts.join(" · ") || "No deadline";
+  return parts.join(" · ");
 }
 
 function DragHandle(props: React.HTMLAttributes<HTMLButtonElement>) {
@@ -77,6 +76,8 @@ export function TodayRow({
 }) {
   const done = task.state === "done";
   const overdue = !done && deadlineTone(task.deadline) === "overdue";
+  const soon = deadlineTone(task.deadline) !== "normal";
+  const sub = subline(task);
   return (
     <div
       onClick={() => onOpen(task)}
@@ -114,12 +115,20 @@ export function TodayRow({
         >
           {task.title}
         </div>
-        <div
-          className={overdue ? undefined : "text-muted"}
-          style={{ fontSize: 11.5, color: overdue ? "var(--color-accent-800)" : undefined }}
-        >
-          {subline(task)}
-        </div>
+        {sub ? (
+          <div
+            className={overdue ? undefined : "text-muted"}
+            style={{
+              fontSize: 11.5,
+              color: overdue ? "var(--color-accent-800)" : undefined,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {sub}
+          </div>
+        ) : null}
       </div>
       {!done && overdue ? (
         <span className="tag" style={{ background: "var(--color-accent-800)", color: "var(--color-accent-100)" }}>
@@ -133,6 +142,20 @@ export function TodayRow({
         <span className="tag tag-neutral" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
           <ClockIcon />
           {fmtTime(task.commitment_at)}
+        </span>
+      ) : null}
+      {!done ? (
+        <span
+          className={task.deadline && soon ? undefined : "text-muted"}
+          style={{
+            fontSize: 12,
+            whiteSpace: "nowrap",
+            ...(soon && task.deadline
+              ? { color: "var(--color-accent-700)", fontWeight: 500 }
+              : {}),
+          }}
+        >
+          {fmtDue(task.deadline) ?? "—"}
         </span>
       ) : null}
       {!done ? <EffortDot task={task} /> : null}
@@ -170,16 +193,33 @@ function RecurringRow({
     >
       {dragHandleProps ? <DragHandle {...dragHandleProps} /> : <DragDots />}
       <Square checked={done} onToggle={() => onToggleDone(task)} />
-      <span
-        style={{
-          flex: 1,
-          fontSize: 14,
-          textDecoration: done ? "line-through" : undefined,
-          color: done ? "var(--color-neutral-500)" : undefined,
-        }}
-      >
-        {task.title}
-      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 14,
+            textDecoration: done ? "line-through" : undefined,
+            color: done ? "var(--color-neutral-500)" : undefined,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {task.title}
+        </div>
+        {task.notes ? (
+          <div
+            className="text-muted"
+            style={{
+              fontSize: 11.5,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {task.notes.replace(/\s+/g, " ").trim()}
+          </div>
+        ) : null}
+      </div>
       <span
         className={done ? "tag tag-accent" : "tag tag-neutral"}
         style={{ display: "inline-flex", gap: 4, alignItems: "center" }}
@@ -187,6 +227,7 @@ function RecurringRow({
         <FlameIcon />
         {task.streak + (done ? 1 : 0)}-day streak
       </span>
+      {!done ? <EffortDot task={task} /> : null}
     </div>
   );
 }
@@ -328,7 +369,7 @@ export function TodayBoards({
         </div>
       </Blueprint>
 
-      <div>
+      <div style={{ marginTop: 12 }}>
         <h6 className="text-muted" style={{ margin: "0 0 8px" }}>
           Recurring — not counted above
         </h6>

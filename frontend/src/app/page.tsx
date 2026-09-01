@@ -133,7 +133,8 @@ export default function Dashboard() {
         }}
       >
         {/* — Today column — */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* minWidth 0 lets long nowrap notes truncate instead of widening the 1fr track */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
             <h3 style={{ margin: 0 }}>Today</h3>
             <span className="text-muted" style={{ fontSize: 12 }}>
@@ -170,7 +171,7 @@ export default function Dashboard() {
         </div>
 
         {/* — All tasks column — */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
             <h3 style={{ margin: 0 }}>All tasks</h3>
             <span className="text-muted" style={{ fontSize: 12 }}>
@@ -205,19 +206,32 @@ export default function Dashboard() {
                     onToggle={() => toggleDone(t)}
                     label={`Mark "${t.title}" done`}
                   />
-                  <span
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      fontSize: 14,
-                      fontWeight: 500,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {t.title}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {t.title}
+                    </div>
+                    {t.notes ? (
+                      <div
+                        className="text-muted"
+                        style={{
+                          fontSize: 11.5,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t.notes.replace(/\s+/g, " ").trim()}
+                      </div>
+                    ) : null}
+                  </div>
                   <span
                     className={t.deadline && !soon ? "text-muted" : !t.deadline ? "text-muted" : undefined}
                     style={{
@@ -251,7 +265,7 @@ export default function Dashboard() {
               <>
                 <h6
                   className="text-muted"
-                  style={{ margin: 0, padding: "10px 14px 6px", fontSize: 11 }}
+                  style={{ margin: 0, padding: "22px 14px 6px", fontSize: 11 }}
                 >
                   Recently completed
                 </h6>
