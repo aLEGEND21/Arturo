@@ -1,9 +1,11 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   closestCorners,
@@ -158,7 +160,7 @@ export function TodayRow({
           {fmtDue(task.deadline) ?? "—"}
         </span>
       ) : null}
-      {!done ? <EffortDot task={task} /> : null}
+      <EffortDot task={task} />
     </div>
   );
 }
@@ -227,7 +229,7 @@ function RecurringRow({
         <FlameIcon />
         {task.streak + (done ? 1 : 0)}-day streak
       </span>
-      {!done ? <EffortDot task={task} /> : null}
+      <EffortDot task={task} />
     </div>
   );
 }
@@ -254,7 +256,7 @@ function SortableItem({
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.6 : undefined,
+        opacity: isDragging ? 0.35 : undefined,
         zIndex: isDragging ? 10 : undefined,
         position: "relative",
         background: "var(--color-bg)",
@@ -306,6 +308,16 @@ export function TodayBoards({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+  // Rendered in a DragOverlay so the row stays visible while crossing
+  // between the regular and recurring sections.
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  function handleDragStart(event: DragStartEvent) {
+    const id = event.active.id as number;
+    setActiveTask(
+      regular.find((t) => t.id === id) ?? recurring.find((t) => t.id === id) ?? null
+    );
+  }
 
   function containerOf(id: number | string): "regular" | "recurring" | null {
     if (id === "regular-zone") return "regular";
@@ -316,6 +328,7 @@ export function TodayBoards({
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    setActiveTask(null);
     const { active, over } = event;
     if (!over) return;
     const activeId = active.id as number;
@@ -343,7 +356,13 @@ export function TodayBoards({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveTask(null)}
+    >
       <Blueprint>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {addRow}
@@ -395,6 +414,24 @@ export function TodayBoards({
           </SortableContext>
         </Blueprint>
       </div>
+
+      <DragOverlay>
+        {activeTask ? (
+          <div
+            style={{
+              background: "var(--color-bg)",
+              border: "1px solid var(--color-divider)",
+              boxShadow: "var(--shadow-lg)",
+            }}
+          >
+            {activeTask.recurring ? (
+              <RecurringRow task={activeTask} onToggleDone={() => {}} onOpen={() => {}} isLast />
+            ) : (
+              <TodayRow task={activeTask} onToggleDone={() => {}} onOpen={() => {}} isLast />
+            )}
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }
