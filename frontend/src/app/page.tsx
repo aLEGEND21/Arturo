@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { toast } from "sonner";
-import { Task, api, deadlineTone, fetcher, fmtDue } from "@/lib/api";
+import { DayHistory, Task, api, deadlineTone, fetcher, fmtDue } from "@/lib/api";
 import { BacklogAddRow, TodayAddRow } from "@/components/add-row";
+import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
 import { ContextStrip } from "@/components/context-strip";
 import { Blueprint, Square } from "@/components/industry";
@@ -14,11 +16,48 @@ import { TodayBoards } from "@/components/today-list";
 const TODAY_KEY = "/api/tasks?view=today";
 const ALL_KEY = "/api/tasks?view=all";
 
-export default function Dashboard() {
+function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// useSearchParams needs a Suspense boundary during prerendering.
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
   const { data: todayTasks, error } = useSWR<Task[]>(TODAY_KEY, fetcher);
   const { data: allTasks } = useSWR<Task[]>(ALL_KEY, fetcher);
   const { mutate } = useSWRConfig();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // The browsed day lives in the URL (?day=YYYY-MM-DD) so it survives reloads
+  // and can be shared. No param = today, so an open tab never goes stale at
+  // midnight. Offset 0 = today; negative = past days (read-only).
+  const router = useRouter();
+  const dayParam = useSearchParams().get("day");
+  const dayOffset = useMemo(() => {
+    if (!dayParam || !/^\d{4}-\d{2}-\d{2}$/.test(dayParam)) return 0;
+    const target = new Date(`${dayParam}T00:00:00`);
+    if (isNaN(target.getTime())) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.min(0, Math.round((target.getTime() - today.getTime()) / 86400000));
+  }, [dayParam]);
+
+  function goToOffset(offset: number) {
+    if (offset >= 0) {
+      router.replace("/", { scroll: false });
+      return;
+    }
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    router.replace(`/?day=${localIso(d)}`, { scroll: false });
+  }
 
   const recurring = (todayTasks ?? []).filter((t) => t.recurring);
   const regular = (todayTasks ?? []).filter((t) => !t.recurring);
@@ -101,11 +140,33 @@ export default function Dashboard() {
     }
   }
 
-  const todayLabel = new Date().toLocaleDateString(undefined, {
+  const viewDate = new Date();
+  viewDate.setDate(viewDate.getDate() + dayOffset);
+  const viewIso = localIso(viewDate);
+  const { data: history } = useSWR<DayHistory>(
+    dayOffset < 0 ? `/api/history/${viewIso}` : null,
+    fetcher
+  );
+
+  const heading =
+    dayOffset === 0
+      ? "Today"
+      : dayOffset === -1
+        ? "Yesterday"
+        : viewDate.toLocaleDateString(undefined, { weekday: "long" });
+  const dateLabel = viewDate.toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
+
+  const histRegular = (history?.tasks ?? []).filter((t) => !t.recurring);
+  const histDone = histRegular.filter((t) => t.status === "done").length;
+  const histTotal = histRegular.filter(
+    (t) => t.status === "done" || t.status === "not_finished"
+  ).length;
+  const shownDone = dayOffset === 0 ? doneCount : histDone;
+  const shownTotal = dayOffset === 0 ? regular.length : histTotal;
 
   return (
     <div>
@@ -135,10 +196,40 @@ export default function Dashboard() {
         {/* — Today column — */}
         {/* minWidth 0 lets long nowrap notes truncate instead of widening the 1fr track */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <h3 style={{ margin: 0 }}>Today</h3>
-            <span className="text-muted" style={{ fontSize: 12 }}>
-              {todayLabel}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 12,
+              position: "relative",
+            }}
+          >
+            <h3 style={{ margin: 0 }}>{heading}</h3>
+            {/* Absolutely centered in the column so the arrows stay put no
+                matter how wide the day name or counter is. */}
+            <span
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 3,
+              }}
+            >
+              <DayArrow dir={-1} onClick={() => goToOffset(dayOffset - 1)} />
+              <span
+                className="text-muted"
+                style={{ fontSize: 12, width: 76, textAlign: "center" }}
+              >
+                {dateLabel}
+              </span>
+              <DayArrow
+                dir={1}
+                disabled={dayOffset === 0}
+                onClick={() => goToOffset(dayOffset + 1)}
+              />
             </span>
             <span style={{ flex: 1 }} />
             <span
@@ -150,24 +241,34 @@ export default function Dashboard() {
                 color: "var(--color-accent-700)",
               }}
             >
-              {doneCount}
+              {shownDone}
               <span style={{ color: "var(--color-neutral-500)", fontSize: 16 }}>
                 {" "}
-                / {regular.length} done
+                / {shownTotal} done
               </span>
             </span>
           </div>
 
-          <TodayBoards
-            regular={regular}
-            recurring={recurring}
-            addRow={<TodayAddRow />}
-            onToggleDone={toggleDone}
-            onOpen={(t) => setSelectedId(t.id)}
-            onReorderRegular={(ids) => reorderList(ids, "regular")}
-            onReorderRecurring={(ids) => reorderList(ids, "recurring")}
-            onCrossMove={crossMove}
-          />
+          {dayOffset === 0 ? (
+            <TodayBoards
+              regular={regular}
+              recurring={recurring}
+              addRow={<TodayAddRow />}
+              onToggleDone={toggleDone}
+              onOpen={(t) => setSelectedId(t.id)}
+              onReorderRegular={(ids) => reorderList(ids, "regular")}
+              onReorderRecurring={(ids) => reorderList(ids, "recurring")}
+              onCrossMove={crossMove}
+            />
+          ) : history ? (
+            <DayHistoryBoards tasks={history.tasks} />
+          ) : (
+            <Blueprint>
+              <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
+                Loading…
+              </div>
+            </Blueprint>
+          )}
         </div>
 
         {/* — All tasks column — */}
@@ -320,5 +421,45 @@ export default function Dashboard() {
 
       <TaskDrawer task={selected} onClose={() => setSelectedId(null)} />
     </div>
+  );
+}
+
+function DayArrow({
+  dir,
+  onClick,
+  disabled = false,
+}: {
+  dir: -1 | 1;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={dir === -1 ? "Previous day" : "Next day"}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: "none",
+        padding: 2,
+        display: "grid",
+        cursor: disabled ? "default" : "pointer",
+        color: disabled ? "var(--color-neutral-300)" : "var(--color-neutral-600)",
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points={dir === -1 ? "15 18 9 12 15 6" : "9 18 15 12 9 6"} />
+      </svg>
+    </button>
   );
 }

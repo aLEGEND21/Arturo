@@ -82,6 +82,24 @@ export interface TaskEvent {
   created_at: string;
 }
 
+export type DayStatus = "done" | "not_finished" | "removed" | "dropped" | "missed";
+
+export interface HistoryTask {
+  id: number;
+  title: string;
+  notes: string | null;
+  recurring: boolean;
+  effort: Effort | null;
+  streak: number;
+  status: DayStatus;
+  completed_at: string | null;
+}
+
+export interface DayHistory {
+  date: string;
+  tasks: HistoryTask[];
+}
+
 export interface StatsSummary {
   done_today: number;
   today_total: number;

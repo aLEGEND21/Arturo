@@ -14,7 +14,7 @@ export function Nav() {
     <header style={{ borderBottom: "1px solid var(--color-divider)" }}>
       <div className="nav mx-auto w-full max-w-[1280px]">
         <Link href="/" className="nav-brand">
-          ARTURO
+          ARTURO DASHBOARD
         </Link>
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
           Today

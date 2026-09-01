@@ -1,5 +1,6 @@
+import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -129,6 +130,87 @@ def update_settings(body: SettingsUpdate, conn: sqlite3.Connection = Depends(db_
         conn.execute(f"UPDATE settings SET {sets} WHERE id = 1", list(fields.values()))
         conn.commit()
     return dict(conn.execute("SELECT * FROM settings WHERE id = 1").fetchone())
+
+
+# --- day history ---
+
+@router.get("/history/{day}")
+def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
+    """Reconstruct a past day's task list from the append-only event log.
+
+    Tasks only store current state, so 'what was on the list on day D and
+    how did it end' is replayed from events: completed / promoted /
+    deferred / dropped. Rollover deferrals fire at ~4am the next morning
+    and are attributed back to the day they close out.
+    """
+    try:
+        target = date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="day must be YYYY-MM-DD")
+    tz_name = conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0]
+    tz = ZoneInfo(tz_name)
+    if target >= datetime.now(tz).date():
+        raise HTTPException(status_code=400, detail="History covers past days only")
+
+    utc = ZoneInfo("UTC")
+    start = datetime.combine(target, time.min, tzinfo=tz)
+    # Two days: the target day itself plus the next morning's rollover events.
+    end = start + timedelta(days=2)
+    rows = conn.execute(
+        """SELECT e.task_id, e.event_type, e.payload, e.created_at,
+                  t.title, t.notes, t.recurring, t.effort, t.streak
+           FROM task_events e JOIN tasks t ON t.id = e.task_id
+           WHERE e.created_at >= ? AND e.created_at < ?
+           ORDER BY e.id ASC""",
+        (start.astimezone(utc).isoformat(), end.astimezone(utc).isoformat()),
+    ).fetchall()
+
+    tasks: dict[int, dict] = {}
+    for r in rows:
+        payload = json.loads(r["payload"]) if r["payload"] else {}
+        local_date = datetime.fromisoformat(r["created_at"]).astimezone(tz).date()
+        if r["event_type"] == "deferred" and payload.get("reason") == "rollover":
+            local_date -= timedelta(days=1)
+        if local_date != target:
+            continue
+        entry = tasks.setdefault(
+            r["task_id"],
+            {
+                "id": r["task_id"],
+                "title": r["title"],
+                "notes": r["notes"],
+                "recurring": bool(r["recurring"]),
+                "effort": r["effort"],
+                "streak": r["streak"],
+                "status": None,
+                "completed_at": None,
+            },
+        )
+        et = r["event_type"]
+        if et == "completed":
+            entry["status"] = "done"
+            entry["completed_at"] = r["created_at"]
+        elif et == "state_changed" and entry["status"] == "done" and payload.get("to") != "done":
+            entry["status"] = "open"
+            entry["completed_at"] = None
+        elif et == "deferred" and entry["status"] != "done":
+            entry["status"] = "not_finished" if payload.get("reason") == "rollover" else "removed"
+        elif et == "dropped":
+            entry["status"] = "dropped"
+        elif et == "promoted" and entry["status"] is None:
+            entry["status"] = "open"
+
+    out = []
+    for e in tasks.values():
+        if e["status"] is None:
+            continue  # only incidental events (notes edits, commitments) that day
+        if e["status"] == "open":
+            # Never resolved by a later event: recurring tasks were reset
+            # without completing; non-recurring ones just weren't finished.
+            e["status"] = "missed" if e["recurring"] else "not_finished"
+        out.append(e)
+    out.sort(key=lambda e: (e["recurring"], 0 if e["status"] == "done" else 1, e["title"].lower()))
+    return {"date": day, "tasks": out}
 
 
 # --- stats ---
