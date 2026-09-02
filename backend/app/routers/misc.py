@@ -169,7 +169,7 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
     for r in rows:
         payload = json.loads(r["payload"]) if r["payload"] else {}
         local_date = datetime.fromisoformat(r["created_at"]).astimezone(tz).date()
-        if r["event_type"] == "deferred" and payload.get("reason") == "rollover":
+        if r["event_type"] in ("deferred", "carried_over") and payload.get("reason") == "rollover":
             local_date -= timedelta(days=1)
         if local_date != target:
             continue
@@ -195,6 +195,8 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
             entry["completed_at"] = None
         elif et == "deferred" and entry["status"] != "done":
             entry["status"] = "not_finished" if payload.get("reason") == "rollover" else "removed"
+        elif et == "carried_over" and entry["status"] != "done":
+            entry["status"] = "not_finished"
         elif et == "dropped":
             entry["status"] = "dropped"
         elif et == "promoted" and entry["status"] is None:

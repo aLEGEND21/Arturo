@@ -30,6 +30,8 @@ function eventLine(e: TaskEvent): string {
       return `created — via ${String(p.source ?? "dashboard")}`;
     case "committed":
       return `committed — ${fmtDue(String(p.at)) ?? ""}`;
+    case "carried_over":
+      return "carried over — stayed on today";
     default:
       return e.event_type;
   }

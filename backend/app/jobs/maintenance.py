@@ -21,13 +21,13 @@ def _local_date(iso: str | None, tz: ZoneInfo) -> date | None:
 
 
 def run_rollover() -> dict:
-    """4am daily. Resets recurring tasks, defers yesterday's leftovers,
+    """4am daily. Resets recurring tasks, carries unfinished today tasks over,
     promotes tasks due or committed today. Promotions land at the top."""
     conn = get_conn()
     try:
         tz = ZoneInfo(conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0])
         today = datetime.now(tz).date()
-        stats = {"recurring_reset": 0, "deferred": 0, "promoted": 0}
+        stats = {"recurring_reset": 0, "carried_over": 0, "promoted": 0}
 
         # 1. Recurring tasks: streak bookkeeping, then reset and re-promote.
         for r in conn.execute("SELECT * FROM tasks WHERE recurring = 1 AND state != 'dropped'").fetchall():
@@ -40,21 +40,24 @@ def run_rollover() -> dict:
             log_event(conn, r["id"], "promoted", {"reason": "recurring", "streak": new_streak})
             stats["recurring_reset"] += 1
 
-        # 2. Clear today_flag on finished non-recurring tasks; defer unfinished ones.
+        # 2. Clear today_flag on finished non-recurring tasks; unfinished ones
+        # stay on the list. The carried_over event marks the day boundary so
+        # history can show them as not finished for the day that just ended.
         conn.execute("UPDATE tasks SET today_flag = 0 WHERE recurring = 0 AND today_flag = 1 AND state = 'done'")
         leftovers = conn.execute(
             """SELECT id FROM tasks WHERE recurring = 0 AND today_flag = 1
                AND state NOT IN ('done','dropped')"""
         ).fetchall()
         for r in leftovers:
-            conn.execute("UPDATE tasks SET today_flag = 0, nudge_level = 0 WHERE id = ?", (r["id"],))
-            log_event(conn, r["id"], "deferred", {"reason": "rollover"})
-            stats["deferred"] += 1
+            conn.execute("UPDATE tasks SET nudge_level = 0 WHERE id = ?", (r["id"],))
+            log_event(conn, r["id"], "carried_over", {"reason": "rollover"})
+            stats["carried_over"] += 1
 
-        # 3. Promote: due today, committed today, or overdue.
+        # 3. Promote from the backlog: due today, committed today, or overdue.
         promoted_ids = []
         open_tasks = conn.execute(
-            "SELECT * FROM tasks WHERE recurring = 0 AND state NOT IN ('done','dropped')"
+            """SELECT * FROM tasks WHERE recurring = 0 AND today_flag = 0
+               AND state NOT IN ('done','dropped')"""
         ).fetchall()
         for r in open_tasks:
             dl = _local_date(r["deadline"], tz)
