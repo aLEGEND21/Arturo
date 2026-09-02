@@ -33,6 +33,13 @@ The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8000`).
 The backend reads `ARTURO_DB` (defaults to `backend/data/arturo.db`, created on boot)
 and `TZ` (defaults to `America/New_York`) for job scheduling.
 
+Or run the whole stack with Docker Compose (frontend on port 3000; the backend is
+not published — the Next server proxies `/api` to it over the compose network):
+
+```sh
+docker compose up --build
+```
+
 ## What's implemented
 
 - **Full schema from §5** — `tasks`, append-only `task_events`, `context_notes`,
@@ -41,17 +48,45 @@ and `TZ` (defaults to `America/New_York`) for job scheduling.
 - **Tasks API** — CRUD, per-field event logging (`created`, `completed`, `promoted`,
   `deferred`, `committed`, `state_changed`, `dropped`), drag-reorder endpoint that
   reuses position slots so backlog ordering survives a today-list reorder.
-- **Rollover job (4am)** — recurring reset + streak bookkeeping, carryover `deferred`
-  events, promotion by deadline/commitment/overdue, promotions land at the top.
+- **Rollover job (4am)** — recurring reset + streak bookkeeping, unfinished today
+  tasks stay put (logged as `carried_over`), promotion from the backlog by
+  deadline/commitment/overdue, promotions land at the top.
   Manual trigger: `POST /api/jobs/rollover`.
 - **Sweep job (3am + startup)** — expires context notes, kills notes on closed tasks,
   enforces the 5-note cap, clears stale snoozes. Manual: `POST /api/jobs/sweep`.
+- **Backup job (3:55am)** — nightly SQLite snapshot, taken just before rollover
+  mutates state. Manual: `POST /api/jobs/backup`. See below.
+- **Day history** — `GET /api/history/{YYYY-MM-DD}` replays the event log to show
+  what was on a past day's list and how it ended; the dashboard's ‹ › arrows use it.
 - **Dashboard** — Today view (pinned recurring section with streaks, dnd-kit
   reordering with optimistic updates, done-count), Backlog (board filter, soonest
   deadline first), quick-add with date shortcuts, task drawer (state, notes,
   handling, blocked reason, context notes, event history), active-context strip,
   rules page with the 15-active cap.
 - `GET /health` for the uptime monitor (open question 11).
+
+## Backups & restore
+
+Every night at 3:55am the backend writes a consistent snapshot (SQLite online
+backup API, WAL-safe) to `backups/arturo-YYYY-MM-DD.db` next to the database —
+under compose that's `./backend/data/backups/` on the host via the bind mount.
+The newest 14 are kept; older ones are pruned. `POST /api/jobs/backup` takes one
+on demand. The job only fires while the backend is running, and it doesn't
+protect against disk loss — sync `backend/data/backups/` somewhere off-host for
+that.
+
+To restore from a backup:
+
+```sh
+docker compose down                     # stop the stack (or your dev servers)
+cd backend/data
+rm -f arturo.db arturo.db-wal arturo.db-shm   # drop the live DB + WAL sidecars
+cp backups/arturo-2026-09-01.db arturo.db     # pick the snapshot you want
+docker compose up -d                    # start again
+```
+
+The WAL/SHM sidecars must go with the old database — restoring the `.db` file
+while stale sidecars remain can corrupt the restored copy.
 
 ## Notes
 
