@@ -27,6 +27,25 @@ export function Blueprint({
   );
 }
 
+/* Red chip for past-due tasks; lineHeight 1 keeps the text truly centered. */
+export function OverdueTag() {
+  return (
+    <span
+      className="tag"
+      style={{
+        background: "#f8dcd8",
+        color: "#8f261c",
+        lineHeight: 1,
+        // Optical centering: the text sits low with equal padding, so give
+        // the bottom more room.
+        padding: "3px 10px 4px",
+      }}
+    >
+      overdue
+    </span>
+  );
+}
+
 /* 18px square checkbox from the mockup rows. */
 export function Square({
   checked,

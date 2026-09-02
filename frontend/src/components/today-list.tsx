@@ -23,7 +23,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
 import { EffortDot } from "./effort-dot";
-import { Blueprint, ClockIcon, DragDots, FlameIcon, Square } from "./industry";
+import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square } from "./industry";
 
 function subline(task: Task): string {
   const parts: string[] = [];
@@ -90,16 +90,9 @@ export function TodayRow({
         padding: "11px 14px",
         borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
         cursor: "pointer",
-        background: overdue ? "var(--color-accent-100)" : undefined,
       }}
-      onMouseEnter={(e) =>
-        (e.currentTarget.style.background = overdue
-          ? "var(--color-accent-200)"
-          : "var(--color-neutral-100)")
-      }
-      onMouseLeave={(e) =>
-        (e.currentTarget.style.background = overdue ? "var(--color-accent-100)" : "")
-      }
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
     >
       {dragHandleProps ? <DragHandle {...dragHandleProps} /> : <DragDots />}
       <Square checked={done} onToggle={() => onToggleDone(task)} />
@@ -119,10 +112,9 @@ export function TodayRow({
         </div>
         {sub ? (
           <div
-            className={overdue ? undefined : "text-muted"}
+            className="text-muted"
             style={{
               fontSize: 11.5,
-              color: overdue ? "var(--color-accent-800)" : undefined,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -132,11 +124,7 @@ export function TodayRow({
           </div>
         ) : null}
       </div>
-      {!done && overdue ? (
-        <span className="tag" style={{ background: "var(--color-accent-800)", color: "var(--color-accent-100)" }}>
-          overdue
-        </span>
-      ) : null}
+      {!done && overdue ? <OverdueTag /> : null}
       {!done && !overdue && task.state !== "not_started" ? (
         <span className="tag tag-accent">{task.state.replace("_", " ")}</span>
       ) : null}

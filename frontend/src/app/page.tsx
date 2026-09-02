@@ -9,7 +9,7 @@ import { BacklogAddRow, TodayAddRow } from "@/components/add-row";
 import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
 import { ContextStrip } from "@/components/context-strip";
-import { Blueprint, Square } from "@/components/industry";
+import { Blueprint, OverdueTag, Square } from "@/components/industry";
 import { TaskDrawer, revalidateAll } from "@/components/task-drawer";
 import { TodayBoards } from "@/components/today-list";
 
@@ -283,7 +283,8 @@ function Dashboard() {
           <Blueprint>
             <BacklogAddRow />
             {backlog.map((t, i) => {
-              const soon = deadlineTone(t.deadline) !== "normal";
+              const tone = deadlineTone(t.deadline);
+              const soon = tone !== "normal";
               return (
                 <div
                   key={t.id}
@@ -333,6 +334,7 @@ function Dashboard() {
                       </div>
                     ) : null}
                   </div>
+                  {tone === "overdue" ? <OverdueTag /> : null}
                   <span
                     className={t.deadline && !soon ? "text-muted" : !t.deadline ? "text-muted" : undefined}
                     style={{
