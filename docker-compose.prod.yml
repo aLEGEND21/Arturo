@@ -1,0 +1,36 @@
+# Production stack, driven by scripts/deploy.sh with TAG set to the release
+# image tag. Images are built in CI and shipped to the VPS — nothing builds
+# here. nginx (running in its own container) reaches the frontend by name over
+# the external nginx-proxy network: proxy_pass http://arturo-frontend:3000.
+services:
+  arturo-backend:
+    image: arturo-backend:${TAG}
+    container_name: arturo-backend
+    restart: unless-stopped
+    environment:
+      TZ: America/New_York
+      ARTURO_DB: /data/arturo.db
+    volumes:
+      # Real host path (never an overlay/network mount — WAL). Nightly
+      # backups land in /opt/arturo/data/backups.
+      - /opt/arturo/data:/data
+    networks:
+      - internal
+
+  arturo-frontend:
+    image: arturo-frontend:${TAG}
+    container_name: arturo-frontend
+    restart: unless-stopped
+    environment:
+      # Server-side proxy target for /api and /health rewrites.
+      API_PROXY_TARGET: http://arturo-backend:8000
+    depends_on:
+      - arturo-backend
+    networks:
+      - internal
+      - nginx-proxy
+
+networks:
+  internal:
+  nginx-proxy:
+    external: true

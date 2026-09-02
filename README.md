@@ -65,6 +65,23 @@ docker compose up --build
   rules page with the 15-active cap.
 - `GET /health` for the uptime monitor (open question 11).
 
+## Production deploys
+
+Pushing to `main` triggers `.github/workflows/deploy.yml`: it builds both
+images on the runner, ships them to the VPS over SSH (`docker save | docker
+load`), and runs `scripts/deploy.sh <tag>` there. The script brings up
+`docker-compose.prod.yml` from `/opt/arturo`, health-checks `/health` through
+the frontend proxy, and automatically restores the previous release if the new
+one won't serve. `scripts/rollback.sh` swaps back manually.
+
+- Repo secrets required: `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`.
+- The frontend joins the external `nginx-proxy` Docker network; point nginx at
+  `proxy_pass http://arturo-frontend:3000;`. The backend stays on an internal
+  network only — nothing is published to the host.
+- Data (and nightly backups) live at `/opt/arturo/data` on the VPS.
+- Release state (`current`/`previous` tags) is tracked in `/opt/arturo`; all
+  older images are pruned on each deploy.
+
 ## Backups & restore
 
 Every night at 3:55am the backend writes a consistent snapshot (SQLite online
