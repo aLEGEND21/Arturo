@@ -1,11 +1,43 @@
-"""Rollover promotion (4am) and context-note sweep (3am). Plain SQL, no LLM."""
+"""Rollover promotion (4am), context-note sweep (3am), and nightly
+database backup (3:55am). Plain SQL, no LLM."""
 import logging
+import sqlite3
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from ..db import get_conn, log_event, now_iso
+from ..db import DB_PATH, get_conn, log_event, now_iso
 
 log = logging.getLogger("arturo.jobs")
+
+BACKUPS_KEPT = 14
+
+
+def run_backup() -> dict:
+    """3:55am nightly, just before rollover mutates state. SQLite's online
+    backup API takes a consistent snapshot even mid-write under WAL. Backups
+    land next to the DB (bind-mounted to the host under compose) and only
+    the newest BACKUPS_KEPT files are kept."""
+    backups_dir = DB_PATH.parent / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = backups_dir / f"arturo-{datetime.now().date().isoformat()}.db"
+
+    src = sqlite3.connect(DB_PATH)
+    try:
+        dest = sqlite3.connect(dest_path)
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        src.close()
+
+    pruned = 0
+    for old in sorted(backups_dir.glob("arturo-*.db"))[:-BACKUPS_KEPT]:
+        old.unlink()
+        pruned += 1
+
+    log.info("backup complete: %s (%d pruned)", dest_path.name, pruned)
+    return {"backup": dest_path.name, "pruned": pruned}
 
 
 def _local_date(iso: str | None, tz: ZoneInfo) -> date | None:

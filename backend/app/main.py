@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .jobs.maintenance import run_rollover, run_sweep
+from .jobs.maintenance import run_backup, run_rollover, run_sweep
 from .routers import misc, tasks
 
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     run_sweep()  # startup sweep: a crash mid-context-window must not silence the bot forever
     scheduler = BackgroundScheduler(timezone=TZ)
     scheduler.add_job(run_sweep, CronTrigger(hour=3, minute=0, timezone=TZ), id="sweep")
+    # 3:55, not 4:00: the backup snapshots the day's final state before the
+    # rollover mutates it, and the two jobs never write concurrently.
+    scheduler.add_job(run_backup, CronTrigger(hour=3, minute=55, timezone=TZ), id="backup")
     scheduler.add_job(run_rollover, CronTrigger(hour=4, minute=0, timezone=TZ), id="rollover")
     scheduler.start()
     yield
@@ -55,3 +58,8 @@ def trigger_rollover():
 @app.post("/api/jobs/sweep")
 def trigger_sweep():
     return run_sweep()
+
+
+@app.post("/api/jobs/backup")
+def trigger_backup():
+    return run_backup()
