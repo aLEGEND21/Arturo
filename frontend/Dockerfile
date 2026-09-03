@@ -5,6 +5,10 @@ RUN npm ci
 COPY . .
 # Empty base URL = relative /api paths, proxied to the backend by next.config.ts
 ENV NEXT_PUBLIC_API_URL=""
+# Rewrites are compiled into the build output at `next build`, so the proxy
+# target must exist NOW, not at runtime. The backend is always reachable by
+# its compose service name.
+ENV API_PROXY_TARGET="http://arturo-backend:8000"
 RUN npm run build
 
 FROM node:22-alpine

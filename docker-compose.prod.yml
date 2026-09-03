@@ -21,9 +21,8 @@ services:
     image: arturo-frontend:${TAG}
     container_name: arturo-frontend
     restart: unless-stopped
-    environment:
-      # Server-side proxy target for /api and /health rewrites.
-      API_PROXY_TARGET: http://arturo-backend:8000
+    # /api and /health proxy to the backend via rewrites baked in at image
+    # build time (see frontend/Dockerfile: API_PROXY_TARGET).
     depends_on:
       - arturo-backend
     networks:
