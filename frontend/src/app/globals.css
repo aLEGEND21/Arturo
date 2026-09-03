@@ -194,6 +194,15 @@ textarea.input { min-height: 90px; resize: vertical; }
 .tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
+/* — dashboard layout — */
+.dashboard-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 24px; padding: 20px;
+}
+@media (max-width: 768px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+
 /* — navigation — */
 .nav {
   display: flex; align-items: center; gap: var(--space-4);

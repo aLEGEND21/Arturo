@@ -185,14 +185,8 @@ function Dashboard() {
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 24,
-          padding: 20,
-        }}
-      >
+      {/* Two columns; stacks Today above All tasks on small screens (globals.css) */}
+      <div className="dashboard-grid">
         {/* — Today column — */}
         {/* minWidth 0 lets long nowrap notes truncate instead of widening the 1fr track */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
