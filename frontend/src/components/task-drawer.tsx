@@ -217,40 +217,38 @@ export function TaskDrawer({
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Recurring tasks reset daily: no due date, so state + effort share a row. */}
-          <div style={{ display: task.recurring ? "flex" : "contents", gap: 14 }}>
-            <div className="field" style={task.recurring ? { flex: 1 } : undefined}>
-              <label>State</label>
+          <div className="field">
+            <label>State</label>
+            <Seg
+              name="drawer-state"
+              value={task.state}
+              onChange={(v) => patch({ state: v })}
+              stretch
+              options={[
+                { value: "not_started", label: "Not started" },
+                { value: "in_progress", label: "In progress" },
+                { value: "done", label: "Done" },
+              ]}
+            />
+          </div>
+          {/* Recurring tasks reset daily: no due date, so effort gets its own row. */}
+          {task.recurring ? (
+            <div className="field">
+              <label>Effort</label>
               <Seg
-                name="drawer-state"
-                value={task.state}
-                onChange={(v) => patch({ state: v })}
+                name="drawer-effort"
+                value={(task.effort ?? "") as Effort}
+                onChange={(v) => patch({ effort: v })}
+                onDeselect={() => patch({ effort: null })}
                 stretch
                 options={[
-                  { value: "not_started", label: "Not started" },
-                  { value: "in_progress", label: "In progress" },
-                  { value: "done", label: "Done" },
+                  { value: "short", label: "Short" },
+                  { value: "medium", label: "Medium" },
+                  { value: "long", label: "Long" },
                 ]}
               />
             </div>
-            {task.recurring ? (
-              <div className="field" style={{ flex: 1 }}>
-                <label>Effort</label>
-                <Seg
-                  name="drawer-effort"
-                  value={(task.effort ?? "") as Effort}
-                  onChange={(v) => patch({ effort: v })}
-                  onDeselect={() => patch({ effort: null })}
-                  stretch
-                  options={[
-                    { value: "short", label: "Short" },
-                    { value: "medium", label: "Medium" },
-                    { value: "long", label: "Long" },
-                  ]}
-                />
-              </div>
-            ) : null}
-          </div>
+          ) : null}
 
           {!task.recurring ? (
           <div style={{ display: "flex", gap: 14 }}>
