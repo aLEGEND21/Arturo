@@ -8,7 +8,8 @@ export function revalidateAll() {
 }
 
 // Optimistically patch one task in every cached task list, without refetching.
-// Used for live-preview edits (e.g. typing a note) before the PATCH lands.
+// Used to reflect edits (state toggles, drawer fields, note typing) before the
+// PATCH lands; callers revalidate afterwards to sync server-computed fields.
 export function patchTaskCache(id: number, fields: Partial<Task>) {
   swrMutate(
     (key) => typeof key === "string" && key.startsWith("/api/tasks?"),
@@ -16,6 +17,77 @@ export function patchTaskCache(id: number, fields: Partial<Task>) {
       curr ? curr.map((t) => (t.id === id ? { ...t, ...fields } : t)) : curr,
     { revalidate: false }
   );
+}
+
+// Optimistically append a (usually temporary) task to the cached lists it
+// belongs in: the today view only shows today-flagged tasks.
+export function addTaskCache(task: Task) {
+  swrMutate(
+    (key) =>
+      typeof key === "string" &&
+      key.startsWith("/api/tasks?") &&
+      (task.today_flag || !key.includes("view=today")),
+    (curr: Task[] | undefined) => (curr ? [...curr, task] : curr),
+    { revalidate: false }
+  );
+}
+
+// Swap a temporary task for the server-created one (real id) in every list.
+export function replaceTaskCache(tempId: number, task: Task) {
+  swrMutate(
+    (key) => typeof key === "string" && key.startsWith("/api/tasks?"),
+    (curr: Task[] | undefined) => curr?.map((t) => (t.id === tempId ? task : t)),
+    { revalidate: false }
+  );
+}
+
+export function removeTaskCache(id: number) {
+  swrMutate(
+    (key) => typeof key === "string" && key.startsWith("/api/tasks?"),
+    (curr: Task[] | undefined) => curr?.filter((t) => t.id !== id),
+    { revalidate: false }
+  );
+}
+
+// The today view is server-filtered (today_flag = 1, not dropped), so patching
+// those fields isn't enough — the row must leave the today cache too.
+export function removeFromTodayCache(id: number) {
+  swrMutate(
+    (key) => typeof key === "string" && key.includes("view=today"),
+    (curr: Task[] | undefined) => curr?.filter((t) => t.id !== id),
+    { revalidate: false }
+  );
+}
+
+// Placeholder for optimistic task creation: negative id so it can't collide
+// with a real one, max position so it sorts last like the server would place it.
+let tempTaskSeq = -1;
+export function makeTempTask(fields: Partial<Task>): Task {
+  return {
+    id: tempTaskSeq--,
+    title: "",
+    notes: null,
+    handling: null,
+    position: Number.MAX_SAFE_INTEGER,
+    starred: false,
+    recurring: false,
+    streak: 0,
+    board_id: null,
+    deadline: null,
+    commitment_at: null,
+    effort: null,
+    state: "not_started",
+    blocked_reason: null,
+    today_flag: false,
+    snooze_until: null,
+    snooze_reason: null,
+    nudge_level: 0,
+    last_user_update: null,
+    source: "dashboard",
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    ...fields,
+  };
 }
 
 export type Effort = "short" | "medium" | "long";

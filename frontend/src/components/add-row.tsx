@@ -2,7 +2,15 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { api, fmtDue } from "@/lib/api";
+import {
+  Task,
+  addTaskCache,
+  api,
+  fmtDue,
+  makeTempTask,
+  removeTaskCache,
+  replaceTaskCache,
+} from "@/lib/api";
 import { CalendarIcon, PlusIcon } from "./industry";
 import { revalidateAll } from "./task-drawer";
 
@@ -26,12 +34,19 @@ function useAddRow(forToday: boolean) {
   async function save(): Promise<boolean> {
     const t = title.trim();
     if (!t) return false;
+    // Show the row immediately; the temp task is swapped for the server's
+    // (real id) when the POST returns, or removed if it fails.
+    const temp = makeTempTask({ title: t, today_flag: forToday });
+    addTaskCache(temp);
+    setTitle("");
     try {
-      await api("/api/tasks", "POST", { title: t, today: forToday });
-      setTitle("");
+      const created = await api<Task>("/api/tasks", "POST", { title: t, today: forToday });
+      replaceTaskCache(temp.id, created);
       revalidateAll();
       return true;
     } catch (e) {
+      removeTaskCache(temp.id);
+      setTitle(t); // don't lose the typed title on failure
       toast.error(e instanceof Error ? e.message : "Add failed");
       return false;
     }
@@ -48,7 +63,10 @@ function useAddRow(forToday: boolean) {
   }
 
   async function onBlur() {
-    await save();
+    const ok = await save();
+    // A failed save restores the draft title — keep the row open so it
+    // isn't lost; otherwise clear and close as usual.
+    if (!ok && title.trim()) return;
     setTitle("");
     setOpen(false);
   }
@@ -117,13 +135,24 @@ export function BacklogAddRow() {
   async function save(): Promise<boolean> {
     const t = title.trim();
     if (!t) return false;
+    const d = due;
+    const temp = makeTempTask({ title: t, deadline: d || null });
+    addTaskCache(temp);
+    setTitle("");
+    setDue("");
     try {
-      await api("/api/tasks", "POST", { title: t, deadline: due || null, today: false });
-      setTitle("");
-      setDue("");
+      const created = await api<Task>("/api/tasks", "POST", {
+        title: t,
+        deadline: d || null,
+        today: false,
+      });
+      replaceTaskCache(temp.id, created);
       revalidateAll();
       return true;
     } catch (e) {
+      removeTaskCache(temp.id);
+      setTitle(t); // don't lose the typed title on failure
+      setDue(d);
       toast.error(e instanceof Error ? e.message : "Add failed");
       return false;
     }
@@ -167,13 +196,13 @@ export function BacklogAddRow() {
         borderBottom: "1px solid var(--color-divider)",
         background: "var(--color-accent-100)",
       }}
-      onBlur={(e) => {
+      onBlur={async (e) => {
         // Save-and-close only when focus leaves the whole row, so the
         // calendar chip can be used without committing the task early.
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-          save();
-          close();
-        }
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        const ok = await save();
+        // A failed save restores the draft — keep the row open in that case.
+        if (ok || !title.trim()) close();
       }}
     >
       <PlusIcon stroke="var(--color-accent-700)" />

@@ -4,7 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { toast } from "sonner";
-import { DayHistory, Task, api, deadlineTone, fetcher, fmtDue } from "@/lib/api";
+import { DayHistory, Task, api, deadlineTone, fetcher, fmtDue, patchTaskCache } from "@/lib/api";
 import { BacklogAddRow, TodayAddRow } from "@/components/add-row";
 import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
@@ -92,12 +92,11 @@ function Dashboard() {
 
   async function toggleDone(task: Task) {
     const newState: Task["state"] = task.state === "done" ? "not_started" : "done";
-    mutate(
-      TODAY_KEY,
-      (curr: Task[] | undefined) =>
-        (curr ?? []).map((t) => (t.id === task.id ? { ...t, state: newState } : t)),
-      { revalidate: false }
-    );
+    // Mirrors the server: done stamps completed_at, un-done clears it.
+    patchTaskCache(task.id, {
+      state: newState,
+      completed_at: newState === "done" ? new Date().toISOString() : null,
+    });
     try {
       await api(`/api/tasks/${task.id}`, "PATCH", { state: newState });
     } catch (e) {

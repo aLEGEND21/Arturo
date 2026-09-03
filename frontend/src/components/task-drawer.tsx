@@ -11,6 +11,7 @@ import {
   fetcher,
   fmtDue,
   patchTaskCache,
+  removeFromTodayCache,
   revalidateAll,
 } from "@/lib/api";
 import { Blueprint, CheckIcon, CloseIcon, Seg } from "./industry";
@@ -105,12 +106,23 @@ export function TaskDrawer({
 
   async function patch(fields: Record<string, unknown>, close = false) {
     if (!task) return;
+    // Apply optimistically, mirroring the server's side effects: done stamps
+    // completed_at, leaving done clears it, dropping leaves the today list.
+    const opt = { ...fields } as Partial<Task>;
+    if (opt.state === "done") opt.completed_at = new Date().toISOString();
+    else if (opt.state !== undefined && task.state === "done") opt.completed_at = null;
+    if (opt.state === "dropped") opt.today_flag = false;
+    patchTaskCache(task.id, opt);
+    // The today view is server-filtered, so rows it no longer matches must
+    // be evicted rather than just patched.
+    if (opt.today_flag === false) removeFromTodayCache(task.id);
+    if (close) onClose();
     try {
       await api(`/api/tasks/${task.id}`, "PATCH", fields);
-      revalidateAll();
-      if (close) onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      revalidateAll();
     }
   }
 
