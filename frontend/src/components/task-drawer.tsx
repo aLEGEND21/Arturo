@@ -294,7 +294,8 @@ export function TaskDrawer({
                     type="button"
                     aria-label="Clear due date"
                     className="btn btn-ghost"
-                    style={{ padding: "0 4px", fontSize: 12 }}
+                    // Above the transparent date input overlay so it stays clickable.
+                    style={{ padding: "0 4px", fontSize: 12, position: "relative", zIndex: 1 }}
                     onClick={(e) => {
                       e.stopPropagation();
                       patch({ deadline: null });
@@ -308,7 +309,11 @@ export function TaskDrawer({
                   type="datetime-local"
                   value={dueValue}
                   onChange={(e) => patch({ deadline: e.target.value || null })}
-                  style={{ position: "absolute", inset: 0, opacity: 0, pointerEvents: "none" }}
+                  // Taps must reach the input itself: iOS Safari has no
+                  // showPicker() for date inputs, but a direct tap on the
+                  // transparent overlay opens the native picker. On desktop
+                  // the click bubbles to the wrapper's showPicker() call.
+                  style={{ position: "absolute", inset: 0, opacity: 0 }}
                   tabIndex={-1}
                   aria-label="Due date and time"
                 />

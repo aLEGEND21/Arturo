@@ -199,8 +199,13 @@ textarea.input { min-height: 90px; resize: vertical; }
   display: grid; grid-template-columns: 1fr 1fr;
   gap: 24px; padding: 20px;
 }
+/* Inline add-a-task inputs (font size lives here, not inline, so the
+   mobile override below can reach it). */
+.add-input { font-size: 14px; }
 @media (max-width: 768px) {
   .dashboard-grid { grid-template-columns: 1fr; }
+  /* iOS Safari auto-zooms into focused controls under 16px. */
+  .input, .add-input, input[type="datetime-local"] { font-size: 16px; }
 }
 
 /* — navigation — */

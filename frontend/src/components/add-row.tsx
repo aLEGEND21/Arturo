@@ -22,10 +22,32 @@ const bareInput: React.CSSProperties = {
   border: "none",
   outline: "none",
   padding: 0,
-  font: "inherit",
+  // Not the `font` shorthand: it would pin font-size inline, beating the
+  // .add-input mobile override (16px stops iOS focus zoom).
+  fontFamily: "inherit",
   color: "var(--color-text)",
   caretColor: "var(--color-accent)",
 };
+
+/* Placeholder checkbox for the today add-row. Drawn as SVG because iOS
+   Safari's dashed-border renderer drops the short left/right edges of an
+   18px box entirely. */
+function DashedSquare({ color }: { color: string }) {
+  return (
+    <svg width="18" height="18" style={{ flex: "none" }} aria-hidden="true">
+      <rect
+        x="0.75"
+        y="0.75"
+        width="16.5"
+        height="16.5"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeDasharray="3 3"
+      />
+    </svg>
+  );
+}
 
 function useAddRow(forToday: boolean) {
   const [open, setOpen] = useState(false);
@@ -94,7 +116,7 @@ export function TodayAddRow() {
         onMouseLeave={(e) => (e.currentTarget.style.background = "")}
       >
         <PlusIcon />
-        <span style={{ width: 18, height: 18, border: "1.5px dashed var(--color-divider)", flex: "none" }} />
+        <DashedSquare color="var(--color-divider)" />
         <span style={{ fontSize: 14 }}>Add a task…</span>
       </div>
     );
@@ -112,11 +134,12 @@ export function TodayAddRow() {
       }}
     >
       <PlusIcon stroke="var(--color-accent-700)" />
-      <span style={{ width: 18, height: 18, border: "1.5px dashed var(--color-accent-400)", flex: "none" }} />
+      <DashedSquare color="var(--color-accent-400)" />
       <input
         autoFocus
         placeholder="Task title"
-        style={{ ...bareInput, fontSize: 14, fontWeight: 500 }}
+        className="add-input"
+        style={{ ...bareInput, fontWeight: 500 }}
         value={row.title}
         onChange={(e) => row.setTitle(e.target.value)}
         onKeyDown={row.onKeyDown}
@@ -209,7 +232,8 @@ export function BacklogAddRow() {
       <input
         autoFocus
         placeholder="Task title"
-        style={{ ...bareInput, fontSize: 14, fontWeight: 500 }}
+        className="add-input"
+        style={{ ...bareInput, fontWeight: 500 }}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
@@ -253,12 +277,11 @@ export function BacklogAddRow() {
           type="datetime-local"
           value={due}
           onChange={(e) => setDue(e.target.value)}
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0,
-            pointerEvents: "none",
-          }}
+          // Taps must reach the input itself: iOS Safari has no showPicker()
+          // for date inputs, but a direct tap on the transparent overlay
+          // opens the native picker. On desktop the click bubbles to the
+          // chip button's showPicker() call.
+          style={{ position: "absolute", inset: 0, opacity: 0 }}
           tabIndex={-1}
           aria-label="Due date and time"
         />
