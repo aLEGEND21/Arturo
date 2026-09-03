@@ -25,6 +25,9 @@ const bareInput: React.CSSProperties = {
   // Not the `font` shorthand: it would pin font-size inline, beating the
   // .add-input mobile override (16px stops iOS focus zoom).
   fontFamily: "inherit",
+  // Match the collapsed row's text line so opening the row doesn't change
+  // its height (inputs default to line-height: normal, which is shorter).
+  lineHeight: "inherit",
   color: "var(--color-text)",
   caretColor: "var(--color-accent)",
 };
@@ -262,6 +265,9 @@ export function BacklogAddRow() {
           gap: 4,
           fontSize: 12,
           padding: "2px 8px",
+          // Taller than the 14px text line; the negative margin keeps its
+          // painted size while stopping it from stretching the row open.
+          margin: "-3px 0",
           border: "1px solid var(--color-accent)",
           color: due ? "var(--color-bg)" : "var(--color-accent)",
           background: due ? "var(--color-accent)" : "var(--color-bg)",
