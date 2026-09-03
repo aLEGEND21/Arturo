@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { Effort, Task, api, revalidateAll } from "@/lib/api";
+import { Effort, Task, api, patchTaskCache, revalidateAll } from "@/lib/api";
 
 const EFFORT_COLORS: Record<Effort, string> = {
   short: "#5c9d70",
@@ -21,11 +21,12 @@ export function EffortDot({ task, size = 12 }: { task: Task; size?: number }) {
   async function cycle(e: React.MouseEvent) {
     e.stopPropagation();
     const next = CYCLE[(CYCLE.indexOf(effort) + 1) % CYCLE.length];
+    patchTaskCache(task.id, { effort: next });
     try {
       await api(`/api/tasks/${task.id}`, "PATCH", { effort: next });
-      revalidateAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
+      revalidateAll();
     }
   }
 
