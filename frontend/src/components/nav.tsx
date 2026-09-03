@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { StatsSummary, fetcher } from "@/lib/api";
 
 export function Nav() {
-  const pathname = usePathname();
   const { data: stats } = useSWR<StatsSummary>("/api/stats/summary", fetcher, {
     refreshInterval: 60_000,
   });
@@ -16,12 +14,6 @@ export function Nav() {
         <Link href="/" className="nav-brand">
           ARTURO DASHBOARD
         </Link>
-        <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
-          Today
-        </Link>
-        <a href="#" style={{ opacity: 0.45, pointerEvents: "none" }}>
-          Metrics
-        </a>
         <span
           className="text-muted"
           style={{
