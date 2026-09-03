@@ -125,6 +125,13 @@ def get_settings(conn: sqlite3.Connection = Depends(db_dep)):
 @router.patch("/settings")
 def update_settings(body: SettingsUpdate, conn: sqlite3.Connection = Depends(db_dep)):
     fields = body.model_dump(exclude_unset=True)
+    # An invalid timezone would crash every scheduled job (rollover, sweep,
+    # backup) and the stats endpoint at ZoneInfo() time — refuse it here.
+    if fields.get("timezone") is not None:
+        try:
+            ZoneInfo(fields["timezone"])
+        except (ValueError, KeyError, OSError):
+            raise HTTPException(status_code=400, detail="Unknown timezone")
     if fields:
         sets = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(f"UPDATE settings SET {sets} WHERE id = 1", list(fields.values()))
