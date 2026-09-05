@@ -7,6 +7,7 @@ import {
   Effort,
   Task,
   TaskEvent,
+  addToTodayCache,
   api,
   fetcher,
   endOfTodayDeadline,
@@ -115,8 +116,9 @@ export function TaskDrawer({
     if (opt.state === "dropped") opt.today_flag = false;
     patchTaskCache(task.id, opt);
     // The today view is server-filtered, so rows it no longer matches must
-    // be evicted rather than just patched.
+    // be evicted rather than just patched, and newly promoted ones added.
     if (opt.today_flag === false) removeFromTodayCache(task.id);
+    if (opt.today_flag === true) addToTodayCache({ ...task, ...opt });
     if (close) onClose();
     try {
       await api(`/api/tasks/${task.id}`, "PATCH", fields);
@@ -400,6 +402,17 @@ export function TaskDrawer({
               }}
             >
               Not today
+            </button>
+          ) : null}
+          {!task.today_flag && !task.recurring && task.state !== "done" && task.state !== "dropped" ? (
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                patch({ today_flag: true }, true);
+                toast("Added to today");
+              }}
+            >
+              Add to today
             </button>
           ) : null}
           <span style={{ flex: 1 }} />

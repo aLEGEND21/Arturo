@@ -49,6 +49,18 @@ export function removeTaskCache(id: number) {
   );
 }
 
+// Mirror of removeFromTodayCache: a task promoted from the backlog is not in
+// the today cache yet, so patching it there does nothing. Append it (once) so
+// it shows on the today list before revalidation.
+export function addToTodayCache(task: Task) {
+  swrMutate(
+    (key) => typeof key === "string" && key.includes("view=today"),
+    (curr: Task[] | undefined) =>
+      curr && !curr.some((t) => t.id === task.id) ? [...curr, task] : curr,
+    { revalidate: false }
+  );
+}
+
 // The today view is server-filtered (today_flag = 1, not dropped), so patching
 // those fields isn't enough — the row must leave the today cache too.
 export function removeFromTodayCache(id: number) {
