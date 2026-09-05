@@ -94,7 +94,14 @@ export function TodayRow({
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "")}
     >
-      {dragHandleProps ? <DragHandle {...dragHandleProps} /> : <DragDots />}
+      {/* Done rows can't be dragged; a spacer keeps the checkbox column aligned. */}
+      {dragHandleProps ? (
+        <DragHandle {...dragHandleProps} />
+      ) : done ? (
+        <span aria-hidden="true" style={{ width: 14, flex: "none" }} />
+      ) : (
+        <DragDots />
+      )}
       <Square checked={done} onToggle={() => onToggleDone(task)} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -235,8 +242,11 @@ function SortableItem({
   onOpen: (t: Task) => void;
   variant: "regular" | "recurring";
 }) {
+  // Completed regular tasks sit at the bottom by display rule, not position,
+  // so dragging them would have nothing to persist.
+  const locked = variant === "regular" && task.state === "done";
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: task.id });
+    useSortable({ id: task.id, disabled: locked });
   const Row = variant === "regular" ? TodayRow : RecurringRow;
   return (
     <div
@@ -254,7 +264,7 @@ function SortableItem({
         task={task}
         onToggleDone={onToggleDone}
         onOpen={onOpen}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        dragHandleProps={locked ? undefined : { ...attributes, ...listeners }}
         isLast={isLast}
       />
     </div>

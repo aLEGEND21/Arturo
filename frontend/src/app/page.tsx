@@ -70,7 +70,13 @@ function Dashboard() {
   }
 
   const recurring = (todayTasks ?? []).filter((t) => t.recurring);
-  const regular = (todayTasks ?? []).filter((t) => !t.recurring);
+  // Completed tasks sink to the bottom for display only. Stored positions are
+  // untouched, so unchecking puts a task straight back where it was. A stable
+  // partition (not a sort by position) keeps optimistic reorders intact.
+  const regular = useMemo(() => {
+    const list = (todayTasks ?? []).filter((t) => !t.recurring);
+    return [...list.filter((t) => t.state !== "done"), ...list.filter((t) => t.state === "done")];
+  }, [todayTasks]);
   const doneCount = regular.filter((t) => t.state === "done").length;
 
   const backlog = useMemo(() => {
@@ -116,13 +122,21 @@ function Dashboard() {
     }
   }
 
+  // Done tasks are shown at the bottom but keep their real positions, so they
+  // must not take part in a reorder write or that display order would stick.
+  function openIds(ids: number[], byId: Map<number, Task>, keep?: number): number[] {
+    return ids.filter((id) => id === keep || byId.get(id)?.state !== "done");
+  }
+
   async function reorderList(ids: number[], which: "regular" | "recurring") {
     const byId = new Map((todayTasks ?? []).map((t) => [t.id, t]));
     const moved = ids.map((id) => byId.get(id)!).filter(Boolean);
     const next = which === "regular" ? [...moved, ...recurring] : [...regular, ...moved];
     mutate(TODAY_KEY, next, { revalidate: false });
     try {
-      await api("/api/tasks/reorder", "POST", { ids });
+      await api("/api/tasks/reorder", "POST", {
+        ids: which === "regular" ? openIds(ids, byId) : ids,
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Reorder failed");
       mutate(TODAY_KEY);
@@ -141,7 +155,9 @@ function Dashboard() {
     mutate(TODAY_KEY, next, { revalidate: false });
     try {
       await api(`/api/tasks/${taskId}`, "PATCH", { recurring: makeRecurring });
-      await api("/api/tasks/reorder", "POST", { ids: orderedTargetIds });
+      await api("/api/tasks/reorder", "POST", {
+        ids: makeRecurring ? orderedTargetIds : openIds(orderedTargetIds, byId, taskId),
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Move failed");
     } finally {
