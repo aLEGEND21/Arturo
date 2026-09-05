@@ -9,6 +9,7 @@ import {
   TaskEvent,
   api,
   fetcher,
+  endOfTodayDeadline,
   fmtDue,
   logicalDay,
   patchTaskCache,
@@ -138,13 +139,8 @@ export function TaskDrawer({
 
   // datetime-local wants "YYYY-MM-DDTHH:MM"; deadlines may be date-only.
   // With no deadline yet, seed the picker at today 11:59 PM instead of "now".
-  // Calendar today on purpose: at 1am the logical day's 11:59 PM is already past.
   const dueValue = (() => {
-    if (!task.deadline) {
-      const d = new Date();
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      return `${iso}T23:59`;
-    }
+    if (!task.deadline) return endOfTodayDeadline();
     return task.deadline.length === 10
       ? `${task.deadline}T00:00`
       : task.deadline.slice(0, 16);

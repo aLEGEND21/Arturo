@@ -223,6 +223,15 @@ export function logicalDay(at: Date = new Date()): Date {
   return d;
 }
 
+/** 11:59 PM today (calendar date) as a naive local "YYYY-MM-DDTHH:MM" string,
+ *  the format the deadline picker saves. Tasks added to the today list default
+ *  to this; the server does the same. */
+export function endOfTodayDeadline(): string {
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${iso}T23:59`;
+}
+
 export function formatDeadline(iso: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);

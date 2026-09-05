@@ -1,6 +1,8 @@
 import json
 import sqlite3
+from datetime import datetime
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -49,13 +51,20 @@ def list_tasks(
 def create_task(body: TaskCreate, conn: sqlite3.Connection = Depends(db_dep)):
     max_pos = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0]
     today_flag = 1 if (body.today or body.recurring) else 0
+    deadline = body.deadline
+    if body.today and not body.recurring and deadline is None:
+        # A task added straight to the today list is due by the end of the
+        # calendar day it was created on. Naive local time, matching what the
+        # dashboard's datetime picker saves.
+        tz = ZoneInfo(conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0])
+        deadline = datetime.now(tz).strftime("%Y-%m-%dT23:59")
     cur = conn.execute(
         """INSERT INTO tasks (title, notes, handling, position, starred, recurring, board_id,
                               deadline, commitment_at, effort, state, today_flag, source, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             body.title, body.notes, body.handling, max_pos + 1, int(body.starred),
-            int(body.recurring), body.board_id, body.deadline, body.commitment_at,
+            int(body.recurring), body.board_id, deadline, body.commitment_at,
             body.effort, body.state, today_flag, body.source, now_iso(),
         ),
     )

@@ -6,6 +6,7 @@ import {
   Task,
   addTaskCache,
   api,
+  endOfTodayDeadline,
   fmtDue,
   makeTempTask,
   removeTaskCache,
@@ -61,7 +62,11 @@ function useAddRow(forToday: boolean) {
     if (!t) return false;
     // Show the row immediately; the temp task is swapped for the server's
     // (real id) when the POST returns, or removed if it fails.
-    const temp = makeTempTask({ title: t, today_flag: forToday });
+    const temp = makeTempTask({
+      title: t,
+      today_flag: forToday,
+      deadline: forToday ? endOfTodayDeadline() : null,
+    });
     addTaskCache(temp);
     setTitle("");
     try {
