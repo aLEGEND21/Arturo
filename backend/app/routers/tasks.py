@@ -137,6 +137,14 @@ def update_task(task_id: int, body: TaskUpdate, conn: sqlite3.Connection = Depen
     if today_flag is not None and today_flag != task["today_flag"]:
         sets.append("today_flag = ?")
         params.append(int(today_flag))
+        if today_flag:
+            # A manually promoted task joins the bottom of the today list
+            # rather than slotting in by its (creation-order) position: the
+            # tasks already there are due sooner. Rollover promotions still
+            # land at the top.
+            max_pos = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0]
+            sets.append("position = ?")
+            params.append(max_pos + 1)
         log_event(
             conn, task_id,
             "promoted" if today_flag else "deferred",
