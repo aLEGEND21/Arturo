@@ -65,6 +65,7 @@ function useAddRow(forToday: boolean) {
     const temp = makeTempTask({
       title: t,
       today_flag: forToday,
+      backlog_origin: !forToday,
       deadline: forToday ? endOfTodayDeadline() : null,
     });
     addTaskCache(temp);
@@ -167,7 +168,7 @@ export function BacklogAddRow() {
     const t = title.trim();
     if (!t) return false;
     const d = due;
-    const temp = makeTempTask({ title: t, deadline: d || null });
+    const temp = makeTempTask({ title: t, deadline: d || null, backlog_origin: true });
     addTaskCache(temp);
     setTitle("");
     setDue("");

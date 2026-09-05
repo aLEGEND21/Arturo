@@ -79,6 +79,7 @@ export function makeTempTask(fields: Partial<Task>): Task {
     state: "not_started",
     blocked_reason: null,
     today_flag: false,
+    backlog_origin: false,
     snooze_until: null,
     snooze_reason: null,
     nudge_level: 0,
@@ -114,6 +115,8 @@ export interface Task {
   state: TaskState;
   blocked_reason: string | null;
   today_flag: boolean;
+  /** Created on the all-tasks list (not today). Fixed at creation. */
+  backlog_origin: boolean;
   snooze_until: string | null;
   snooze_reason: string | null;
   nudge_level: number;

@@ -12,15 +12,27 @@ from ..schemas import ReorderRequest, TaskCreate, TaskUpdate
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
+# backlog_origin: the task was created on the all-tasks list rather than on
+# today. Derived from the created event so it never drifts, and unaffected by
+# later moves between the lists. The recently completed section keys off it.
+TASK_SELECT = """
+    SELECT t.*,
+           EXISTS (SELECT 1 FROM task_events e
+                   WHERE e.task_id = t.id AND e.event_type = 'created'
+                     AND json_extract(e.payload, '$.today') = 0) AS backlog_origin
+    FROM tasks t
+"""
+
+
 def row_to_task(row: sqlite3.Row) -> dict:
     t = dict(row)
-    for f in ("starred", "recurring", "today_flag"):
+    for f in ("starred", "recurring", "today_flag", "backlog_origin"):
         t[f] = bool(t[f])
     return t
 
 
 def fetch_task(conn: sqlite3.Connection, task_id: int) -> dict:
-    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    row = conn.execute(f"{TASK_SELECT} WHERE t.id = ?", (task_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return row_to_task(row)
@@ -40,10 +52,10 @@ def list_tasks(
     if board_id is not None:
         where.append("board_id = ?")
         params.append(board_id)
-    sql = "SELECT * FROM tasks"
+    sql = TASK_SELECT
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY position ASC, id ASC"
+    sql += " ORDER BY t.position ASC, t.id ASC"
     return [row_to_task(r) for r in conn.execute(sql, params).fetchall()]
 
 
