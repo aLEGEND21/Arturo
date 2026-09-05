@@ -8,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .clock import DAY_START_HOUR
 from .db import init_db
 from .jobs.maintenance import run_backup, run_rollover, run_sweep
 from .routers import misc, tasks
@@ -26,7 +27,8 @@ async def lifespan(app: FastAPI):
     # 3:55, not 4:00: the backup snapshots the day's final state before the
     # rollover mutates it, and the two jobs never write concurrently.
     scheduler.add_job(run_backup, CronTrigger(hour=3, minute=55, timezone=TZ), id="backup")
-    scheduler.add_job(run_rollover, CronTrigger(hour=4, minute=0, timezone=TZ), id="rollover")
+    # The rollover defines the logical day boundary (clock.py).
+    scheduler.add_job(run_rollover, CronTrigger(hour=DAY_START_HOUR, minute=0, timezone=TZ), id="rollover")
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)

@@ -10,6 +10,7 @@ import {
   api,
   fetcher,
   fmtDue,
+  logicalDay,
   patchTaskCache,
   removeFromTodayCache,
   revalidateAll,
@@ -40,8 +41,7 @@ function eventLine(e: TaskEvent): string {
 
 function fmtEventDate(iso: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
+  const sameDay = logicalDay(d).getTime() === logicalDay().getTime();
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   if (sameDay) return `Today ${time}`;
   return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${time}`;
@@ -138,6 +138,7 @@ export function TaskDrawer({
 
   // datetime-local wants "YYYY-MM-DDTHH:MM"; deadlines may be date-only.
   // With no deadline yet, seed the picker at today 11:59 PM instead of "now".
+  // Calendar today on purpose: at 1am the logical day's 11:59 PM is already past.
   const dueValue = (() => {
     if (!task.deadline) {
       const d = new Date();

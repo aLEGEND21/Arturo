@@ -4,7 +4,16 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { toast } from "sonner";
-import { DayHistory, Task, api, deadlineTone, fetcher, fmtDue, patchTaskCache } from "@/lib/api";
+import {
+  DayHistory,
+  Task,
+  api,
+  deadlineTone,
+  fetcher,
+  fmtDue,
+  logicalDay,
+  patchTaskCache,
+} from "@/lib/api";
 import { BacklogAddRow, TodayAddRow } from "@/components/add-row";
 import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
@@ -37,15 +46,16 @@ function Dashboard() {
 
   // The browsed day lives in the URL (?day=YYYY-MM-DD) so it survives reloads
   // and can be shared. No param = today, so an open tab never goes stale at
-  // midnight. Offset 0 = today; negative = past days (read-only).
+  // the day boundary. Offset 0 = today; negative = past days (read-only).
+  // "Today" is the logical working day (see logicalDay), which starts at
+  // 4am to match the rollover job.
   const router = useRouter();
   const dayParam = useSearchParams().get("day");
   const dayOffset = useMemo(() => {
     if (!dayParam || !/^\d{4}-\d{2}-\d{2}$/.test(dayParam)) return 0;
     const target = new Date(`${dayParam}T00:00:00`);
     if (isNaN(target.getTime())) return 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = logicalDay();
     return Math.min(0, Math.round((target.getTime() - today.getTime()) / 86400000));
   }, [dayParam]);
 
@@ -54,7 +64,7 @@ function Dashboard() {
       router.replace("/", { scroll: false });
       return;
     }
-    const d = new Date();
+    const d = logicalDay();
     d.setDate(d.getDate() + offset);
     router.replace(`/?day=${localIso(d)}`, { scroll: false });
   }
@@ -139,7 +149,7 @@ function Dashboard() {
     }
   }
 
-  const viewDate = new Date();
+  const viewDate = logicalDay();
   viewDate.setDate(viewDate.getDate() + dayOffset);
   const viewIso = localIso(viewDate);
   const { data: history } = useSWR<DayHistory>(

@@ -208,12 +208,27 @@ export async function api<T>(
   return res.json();
 }
 
+/** Working days end at the 4am rollover, not midnight (backend clock.py). */
+export const DAY_START_HOUR = 4;
+
+/**
+ * Midnight of the logical day a moment belongs to. Before DAY_START_HOUR
+ * that is the previous calendar date, so 1am still reads as "yesterday's"
+ * working day. Defaults to now.
+ */
+export function logicalDay(at: Date = new Date()): Date {
+  const d = new Date(at);
+  d.setHours(d.getHours() - DAY_START_HOUR);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function formatDeadline(iso: string | null): string | null {
   if (!iso) return null;
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (isNaN(d.getTime())) return iso;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Deadlines are calendar dates; "today" is the logical working day.
+  const today = logicalDay();
   const that = new Date(d);
   that.setHours(0, 0, 0, 0);
   const diff = Math.round((that.getTime() - today.getTime()) / 86400000);

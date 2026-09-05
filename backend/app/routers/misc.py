@@ -1,10 +1,11 @@
 import json
 import sqlite3
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..clock import logical_date, logical_day_start, logical_today
 from ..db import db_dep, now_iso
 from ..schemas import (
     BoardCreate,
@@ -147,8 +148,10 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
 
     Tasks only store current state, so 'what was on the list on day D and
     how did it end' is replayed from events: completed / promoted /
-    deferred / dropped. Rollover deferrals fire at ~4am the next morning
-    and are attributed back to the day they close out.
+    deferred / dropped. Days are logical days (see clock.py): they start at
+    DAY_START_HOUR, so a task finished at 1am counts for the day before.
+    Rollover events fire right at the boundary and are attributed to the
+    day they close out.
     """
     try:
         target = date.fromisoformat(day)
@@ -156,12 +159,13 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
         raise HTTPException(status_code=400, detail="day must be YYYY-MM-DD")
     tz_name = conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0]
     tz = ZoneInfo(tz_name)
-    if target >= datetime.now(tz).date():
+    if target >= logical_today(tz):
         raise HTTPException(status_code=400, detail="History covers past days only")
 
     utc = ZoneInfo("UTC")
-    start = datetime.combine(target, time.min, tzinfo=tz)
-    # Two days: the target day itself plus the next morning's rollover events.
+    start = logical_day_start(target, tz)
+    # Two days: the target day itself plus the rollover events at its close
+    # (which land a hair after the next day's boundary).
     end = start + timedelta(days=2)
     rows = conn.execute(
         """SELECT e.task_id, e.event_type, e.payload, e.created_at,
@@ -175,9 +179,13 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
     tasks: dict[int, dict] = {}
     for r in rows:
         payload = json.loads(r["payload"]) if r["payload"] else {}
-        local_date = datetime.fromisoformat(r["created_at"]).astimezone(tz).date()
+        created = datetime.fromisoformat(r["created_at"])
         if r["event_type"] in ("deferred", "carried_over") and payload.get("reason") == "rollover":
-            local_date -= timedelta(days=1)
+            # Rollover closes out the day in progress when it fired. It runs
+            # at the boundary itself, so step back a second to land on the
+            # day it ended rather than the one it started.
+            created -= timedelta(seconds=1)
+        local_date = logical_date(created, tz)
         if local_date != target:
             continue
         entry = tasks.setdefault(
@@ -228,8 +236,7 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
 def stats_summary(conn: sqlite3.Connection = Depends(db_dep)):
     tz_name = conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0]
     tz = ZoneInfo(tz_name)
-    now_local = datetime.now(tz)
-    day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = logical_day_start(logical_today(tz), tz)
 
     def completed_between(start: datetime, end: datetime) -> int:
         return conn.execute(
