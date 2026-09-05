@@ -258,6 +258,15 @@ export function BacklogAddRow() {
         onClick={() => {
           const el = dueRef.current;
           if (!el) return;
+          // Opening the picker on an empty due defaults it to today 11:59 PM,
+          // so the calendar opens there and that is what sticks unless the
+          // user picks otherwise. Set the DOM value too: showPicker() runs
+          // before React re-renders with the new state.
+          if (!due) {
+            const def = endOfTodayDeadline();
+            el.value = def;
+            setDue(def);
+          }
           try {
             el.showPicker();
           } catch {
