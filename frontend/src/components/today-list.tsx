@@ -25,11 +25,11 @@ import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
 import { EffortDot } from "./effort-dot";
 import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square } from "./industry";
 
+// Done tasks show their completion time in the due slot on the right, so the
+// subline only carries commitment/update context for open ones.
 function subline(task: Task): string {
   const parts: string[] = [];
-  if (task.state === "done" && task.completed_at) {
-    parts.push(`Done ${fmtTime(task.completed_at)}`);
-  } else {
+  if (task.state !== "done") {
     if (task.commitment_at) {
       parts.push(`Committed: ${fmtDue(task.commitment_at)}`);
     }
@@ -141,7 +141,11 @@ export function TodayRow({
           {fmtTime(task.commitment_at)}
         </span>
       ) : null}
-      {!done ? (
+      {done ? (
+        <span className="text-muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+          {task.completed_at ? `Done ${fmtTime(task.completed_at)}` : "Done"}
+        </span>
+      ) : (
         <span
           className={task.deadline && soon ? undefined : "text-muted"}
           style={{
@@ -154,7 +158,7 @@ export function TodayRow({
         >
           {fmtDue(task.deadline) ?? "—"}
         </span>
-      ) : null}
+      )}
       <EffortDot task={task} />
     </div>
   );
