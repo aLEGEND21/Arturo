@@ -93,15 +93,12 @@ function Dashboard() {
   }, [allTasks]);
 
   // Only tasks born on this list. Tasks created on today (even if they visited
-  // the backlog on the way) live on in day history instead.
+  // the backlog on the way) live on in day history instead. A backlog-born task
+  // finished while on today shows here at once, alongside its today row; the
+  // today flag is deliberately not a condition.
   const recentDone = useMemo(() => {
     const list = (allTasks ?? []).filter(
-      (t) =>
-        t.backlog_origin &&
-        !t.recurring &&
-        !t.today_flag &&
-        t.state === "done" &&
-        t.completed_at
+      (t) => t.backlog_origin && !t.recurring && t.state === "done" && t.completed_at
     );
     list.sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
     return list.slice(0, 5);
