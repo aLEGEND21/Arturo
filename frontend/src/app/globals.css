@@ -45,6 +45,17 @@
   --space-6: 20.4px;
   --space-8: 27.2px;
 
+  /* Page gutter and task-row padding; both tighten on small screens so
+     more of each row is content. */
+  --page-pad-x: 20px;
+  --row-pad-y: 11px;
+  --row-pad-x: 14px;
+  /* Rows lead with narrow controls (handle, checkbox) and end with the
+     effort dot, so on small screens the left inset shrinks more than the
+     right. Empty-state messages keep the symmetric --row-pad-x. */
+  --row-pad-l: var(--row-pad-x);
+  --row-pad-r: var(--row-pad-x);
+
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 7px;
@@ -206,27 +217,33 @@ textarea.input { min-height: 90px; resize: vertical; }
 @media (max-width: 768px) {
   .task-row {
     display: grid; grid-template-columns: var(--row-cols);
-    column-gap: 10px; row-gap: 0;
+    column-gap: 8px; row-gap: 0;
   }
   .task-row > * { grid-row: 1 / span 2; }
   .task-row-text { grid-row: 1; grid-column: var(--text-col); }
   .task-row-meta { grid-row: 2; grid-column: var(--text-col); }
   /* No row gap: a plain due date then sits as close to the line above as
-     the description sits to the title. A line with a chip gets the gap
-     back so the chip's box doesn't crowd the text above it. */
-  .task-row-meta:has(> .tag) { margin-top: 4px; }
+     the description sits to the title. A line with a chip gets a little
+     gap back so the chip's box doesn't crowd the text above it. */
+  .task-row-meta:has(> .tag) { margin-top: 3px; }
+  /* Tighter leading pulls title, description, and due date closer. */
+  .task-row-text > *, .task-row-meta { line-height: 1.35; }
   .task-row > :last-child { grid-column: -2; }
 }
 
 /* — dashboard layout — */
 .dashboard-grid {
   display: grid; grid-template-columns: 1fr 1fr;
-  gap: 24px; padding: 20px;
+  gap: 24px; padding: 20px var(--page-pad-x);
 }
 /* Inline add-a-task inputs (font size lives here, not inline, so the
    mobile override below can reach it). */
 .add-input { font-size: 14px; }
 @media (max-width: 768px) {
+  :root {
+    --page-pad-x: 12px; --row-pad-y: 6px; --row-pad-x: 10px;
+    --row-pad-l: 6px; --row-pad-r: 12px;
+  }
   .dashboard-grid { grid-template-columns: 1fr; }
   /* iOS Safari auto-zooms into focused controls under 16px. */
   .input, .add-input, input[type="datetime-local"] { font-size: 16px; }
@@ -235,9 +252,9 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* — navigation — */
 .nav {
   display: flex; align-items: center; gap: var(--space-4);
-  /* 20px matches the dashboard grid padding so the brand and stats line
-     up with the column edges below. */
-  padding: var(--space-4) 20px;
+  /* Horizontal padding matches the dashboard grid gutter so the brand and
+     stats line up with the column edges below. */
+  padding: var(--space-4) var(--page-pad-x);
 }
 .nav-brand {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);

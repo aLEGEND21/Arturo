@@ -204,7 +204,7 @@ function Dashboard() {
       {error ? (
         <div
           style={{
-            margin: "14px 20px 0",
+            margin: "14px var(--page-pad-x) 0",
             padding: "9px 14px",
             border: "1px solid var(--color-divider)",
             fontSize: 13,
@@ -287,7 +287,7 @@ function Dashboard() {
             <DayHistoryBoards tasks={history.tasks} />
           ) : (
             <Blueprint>
-              <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
+              <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
                 Loading…
               </div>
             </Blueprint>
@@ -317,7 +317,7 @@ function Dashboard() {
                     // checkbox, text, effort dot
                     ["--row-cols" as string]: "auto 1fr auto",
                     ["--text-col" as string]: "2",
-                    padding: "11px 14px",
+                    padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
                     borderBottom:
                       i === backlog.length - 1 && recentDone.length === 0
                         ? "none"
@@ -381,7 +381,7 @@ function Dashboard() {
               <div
                 className="text-muted"
                 style={{
-                  padding: 14,
+                  padding: "var(--row-pad-x)",
                   fontSize: 13,
                   borderBottom: recentDone.length > 0 ? "1px solid var(--color-divider)" : "none",
                 }}
@@ -394,7 +394,7 @@ function Dashboard() {
               <>
                 <h6
                   className="text-muted"
-                  style={{ margin: 0, padding: "22px 14px 6px", fontSize: 11 }}
+                  style={{ margin: 0, padding: "22px var(--row-pad-r) 6px var(--row-pad-l)", fontSize: 11 }}
                 >
                   Recently completed
                 </h6>
@@ -406,7 +406,7 @@ function Dashboard() {
                       display: "flex",
                       alignItems: "center",
                       gap: 10,
-                      padding: "8px 14px",
+                      padding: "8px var(--row-pad-r) 8px var(--row-pad-l)",
                       borderBottom:
                         i === recentDone.length - 1
                           ? "none"

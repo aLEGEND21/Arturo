@@ -21,7 +21,7 @@ export function ContextStrip() {
   }
 
   return (
-    <div style={{ margin: "14px 20px 0", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={{ margin: "14px var(--page-pad-x) 0", display: "flex", flexDirection: "column", gap: 8 }}>
       {globals.map((n) => (
         <div
           key={n.id}

@@ -23,7 +23,7 @@ function HistoryRow({ task, isLast }: { task: HistoryTask; isLast: boolean }) {
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "11px 14px",
+        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
         borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
       }}
     >
@@ -83,7 +83,7 @@ export function DayHistoryBoards({ tasks }: { tasks: HistoryTask[] }) {
           <HistoryRow key={t.id} task={t} isLast={i === regular.length - 1} />
         ))}
         {regular.length === 0 ? (
-          <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
+          <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
             No task activity on this day.
           </div>
         ) : null}

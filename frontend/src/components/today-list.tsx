@@ -88,7 +88,7 @@ export function TodayRow({
         // handle, checkbox, text, effort dot
         ["--row-cols" as string]: "auto auto 1fr auto",
         ["--text-col" as string]: "3",
-        padding: "11px 14px",
+        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
         borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
         cursor: "pointer",
       }}
@@ -188,7 +188,7 @@ function RecurringRow({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "10px 14px",
+        padding: "calc(var(--row-pad-y) - 1px) var(--row-pad-r) calc(var(--row-pad-y) - 1px) var(--row-pad-l)",
         cursor: "pointer",
         borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
       }}
@@ -384,7 +384,7 @@ export function TodayBoards({
                 />
               ))}
               {regular.length === 0 ? (
-                <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
+                <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
                   Nothing on today&apos;s list yet.
                 </div>
               ) : null}
@@ -411,7 +411,7 @@ export function TodayBoards({
                 />
               ))}
               {recurring.length === 0 ? (
-                <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
+                <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
                   Drag a task here to make it recurring.
                 </div>
               ) : null}
