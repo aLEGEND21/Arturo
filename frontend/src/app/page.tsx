@@ -311,11 +311,12 @@ function Dashboard() {
               return (
                 <div
                   key={t.id}
+                  className="task-row"
                   onClick={() => setSelectedId(t.id)}
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
+                    // checkbox, text, effort dot
+                    ["--row-cols" as string]: "auto 1fr auto",
+                    ["--text-col" as string]: "2",
                     padding: "11px 14px",
                     borderBottom:
                       i === backlog.length - 1 && recentDone.length === 0
@@ -331,7 +332,7 @@ function Dashboard() {
                     onToggle={() => toggleDone(t)}
                     label={`Mark "${t.title}" done`}
                   />
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="task-row-text" style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         fontSize: 14,
@@ -357,18 +358,20 @@ function Dashboard() {
                       </div>
                     ) : null}
                   </div>
-                  {tone === "overdue" ? <OverdueTag /> : null}
-                  <span
-                    className={t.deadline && !soon ? "text-muted" : !t.deadline ? "text-muted" : undefined}
-                    style={{
-                      fontSize: 12,
-                      whiteSpace: "nowrap",
-                      ...(soon && t.deadline
-                        ? { color: "var(--color-accent-700)", fontWeight: 500 }
-                        : {}),
-                    }}
-                  >
-                    {fmtDue(t.deadline) ?? "—"}
+                  <span className="task-row-meta">
+                    {tone === "overdue" ? <OverdueTag /> : null}
+                    <span
+                      className={t.deadline && !soon ? "text-muted" : !t.deadline ? "text-muted" : undefined}
+                      style={{
+                        fontSize: 12,
+                        whiteSpace: "nowrap",
+                        ...(soon && t.deadline
+                          ? { color: "var(--color-accent-700)", fontWeight: 500 }
+                          : {}),
+                      }}
+                    >
+                      {fmtDue(t.deadline) ?? "—"}
+                    </span>
                   </span>
                   <EffortDot task={t} />
                 </div>

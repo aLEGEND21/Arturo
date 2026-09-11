@@ -194,6 +194,26 @@ textarea.input { min-height: 90px; resize: vertical; }
 .tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
+/* — task rows — */
+/* Chips and the due date sit to the right of the title on wide screens and
+   drop below it on small ones. On small screens the row is a two-line grid:
+   the title block and the meta cluster stack in the text column while the
+   leading controls and the effort dot span both lines, so they stay centered
+   against the whole row. Each row sets --row-cols (its column template) and
+   --text-col (the column its title block lives in). */
+.task-row { display: flex; align-items: center; gap: 10px; }
+.task-row-meta { display: inline-flex; align-items: center; gap: 10px; }
+@media (max-width: 768px) {
+  .task-row {
+    display: grid; grid-template-columns: var(--row-cols);
+    column-gap: 10px; row-gap: 4px;
+  }
+  .task-row > * { grid-row: 1 / span 2; }
+  .task-row-text { grid-row: 1; grid-column: var(--text-col); }
+  .task-row-meta { grid-row: 2; grid-column: var(--text-col); }
+  .task-row > :last-child { grid-column: -2; }
+}
+
 /* — dashboard layout — */
 .dashboard-grid {
   display: grid; grid-template-columns: 1fr 1fr;

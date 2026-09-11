@@ -82,11 +82,12 @@ export function TodayRow({
   const sub = subline(task);
   return (
     <div
+      className="task-row"
       onClick={() => onOpen(task)}
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
+        // handle, checkbox, text, effort dot
+        ["--row-cols" as string]: "auto auto 1fr auto",
+        ["--text-col" as string]: "3",
         padding: "11px 14px",
         borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
         cursor: "pointer",
@@ -103,7 +104,7 @@ export function TodayRow({
         <DragDots />
       )}
       <Square checked={done} onToggle={() => onToggleDone(task)} />
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="task-row-text" style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: 14,
@@ -131,34 +132,36 @@ export function TodayRow({
           </div>
         ) : null}
       </div>
-      {!done && overdue ? <OverdueTag /> : null}
-      {!done && !overdue && task.state !== "not_started" ? (
-        <span className="tag tag-accent">{task.state.replace("_", " ")}</span>
-      ) : null}
-      {!done && task.commitment_at ? (
-        <span className="tag tag-neutral" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-          <ClockIcon />
-          {fmtTime(task.commitment_at)}
-        </span>
-      ) : null}
-      {done ? (
-        <span className="text-muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-          {task.completed_at ? `Done ${fmtTime(task.completed_at)}` : "Done"}
-        </span>
-      ) : (
-        <span
-          className={task.deadline && soon ? undefined : "text-muted"}
-          style={{
-            fontSize: 12,
-            whiteSpace: "nowrap",
-            ...(soon && task.deadline
-              ? { color: "var(--color-accent-700)", fontWeight: 500 }
-              : {}),
-          }}
-        >
-          {fmtDue(task.deadline) ?? "—"}
-        </span>
-      )}
+      <span className="task-row-meta">
+        {!done && overdue ? <OverdueTag /> : null}
+        {!done && !overdue && task.state !== "not_started" ? (
+          <span className="tag tag-accent">{task.state.replace("_", " ")}</span>
+        ) : null}
+        {!done && task.commitment_at ? (
+          <span className="tag tag-neutral" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+            <ClockIcon />
+            {fmtTime(task.commitment_at)}
+          </span>
+        ) : null}
+        {done ? (
+          <span className="text-muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+            {task.completed_at ? `Done ${fmtTime(task.completed_at)}` : "Done"}
+          </span>
+        ) : (
+          <span
+            className={task.deadline && soon ? undefined : "text-muted"}
+            style={{
+              fontSize: 12,
+              whiteSpace: "nowrap",
+              ...(soon && task.deadline
+                ? { color: "var(--color-accent-700)", fontWeight: 500 }
+                : {}),
+            }}
+          >
+            {fmtDue(task.deadline) ?? "—"}
+          </span>
+        )}
+      </span>
       <EffortDot task={task} />
     </div>
   );
