@@ -148,7 +148,10 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
 
     Tasks only store current state, so 'what was on the list on day D and
     how did it end' is replayed from events: completed / promoted /
-    deferred / dropped. Days are logical days (see clock.py): they start at
+    deferred / dropped. Only tasks still on the list at the end of the day
+    are returned: done, not finished, or (recurring) missed. Tasks moved
+    back to the backlog or dropped during the day are left out.
+    Days are logical days (see clock.py): they start at
     DAY_START_HOUR, so a task finished at 1am counts for the day before.
     Rollover events fire right at the boundary and are attributed to the
     day they close out.
@@ -214,13 +217,16 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
             entry["status"] = "not_finished"
         elif et == "dropped":
             entry["status"] = "dropped"
-        elif et == "promoted" and entry["status"] is None:
+        elif et == "promoted" and entry["status"] in (None, "removed", "dropped"):
+            # Back on the list after a defer/drop earlier the same day.
             entry["status"] = "open"
 
     out = []
     for e in tasks.values():
         if e["status"] is None:
             continue  # only incidental events (notes edits, commitments) that day
+        if e["status"] in ("removed", "dropped"):
+            continue  # gone from the list before the day ended
         if e["status"] == "open":
             # Never resolved by a later event: recurring tasks were reset
             # without completing; non-recurring ones just weren't finished.

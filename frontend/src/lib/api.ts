@@ -169,7 +169,9 @@ export interface TaskEvent {
   created_at: string;
 }
 
-export type DayStatus = "done" | "not_finished" | "removed" | "dropped" | "missed";
+// How a task that was still on the list at the end of a past day ended up.
+// Tasks moved off or dropped during the day are not part of history.
+export type DayStatus = "done" | "not_finished" | "missed";
 
 export interface HistoryTask {
   id: number;

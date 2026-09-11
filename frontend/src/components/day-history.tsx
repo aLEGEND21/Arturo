@@ -11,10 +11,6 @@ function statusLabel(t: HistoryTask): { text: string; tone: "muted" | "accent" }
       return { text: "Not finished", tone: "accent" };
     case "missed":
       return { text: "Missed", tone: "accent" };
-    case "removed":
-      return { text: "Moved off", tone: "muted" };
-    case "dropped":
-      return { text: "Dropped", tone: "muted" };
   }
 }
 

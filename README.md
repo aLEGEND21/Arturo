@@ -61,7 +61,9 @@ docker compose up --build
 - **Backup job (3:55am)** — nightly SQLite snapshot, taken just before rollover
   mutates state. Manual: `POST /api/jobs/backup`. See below.
 - **Day history** — `GET /api/history/{YYYY-MM-DD}` replays the event log to show
-  what was on a past day's list and how it ended; the dashboard's ‹ › arrows use it.
+  what was on a past day's list at the end of the day and how it ended (done,
+  not finished, missed); tasks moved off or dropped mid-day are omitted. The
+  dashboard's ‹ › arrows use it.
 - **Dashboard** — Today view (pinned recurring section with streaks, dnd-kit
   reordering with optimistic updates, done-count), Backlog (board filter, soonest
   deadline first), quick-add with date shortcuts, task drawer (state, notes,
