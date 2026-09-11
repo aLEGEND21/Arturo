@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import { Toaster } from "sonner";
 import { Nav } from "@/components/nav";
@@ -18,7 +18,23 @@ const barlowCondensed = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: "Arturo Dashboard",
+  applicationName: "Arturo",
   description: "AI accountability assistant — task dashboard",
+  // Home-screen name and standalone mode on iOS, which ignores most of the
+  // manifest; the icon comes from app/apple-icon.png. Android reads the
+  // manifest (app/manifest.ts) instead.
+  appleWebApp: {
+    capable: true,
+    title: "Arturo",
+    statusBarStyle: "default",
+  },
+  // `capable` above emits the modern mobile-web-app-capable tag, which iOS 17+
+  // reads; older iOS only knows the apple- prefixed one.
+  other: { "apple-mobile-web-app-capable": "yes" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f2f2f3",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

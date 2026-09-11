@@ -69,6 +69,9 @@ docker compose up --build
   deadline first), quick-add with date shortcuts, task drawer (state, notes,
   handling, blocked reason, context notes, event history), active-context strip,
   rules page with the 15-active cap.
+- **Home-screen install** — `app/manifest.ts` plus Apple web-app metadata in
+  `app/layout.tsx` name the installed app "Arturo" and reuse the favicon
+  (`app/icon.png`, mirrored as `app/apple-icon.png` and `public/icons/*`).
 - `GET /health` for the uptime monitor (open question 11).
 
 ## Production deploys
