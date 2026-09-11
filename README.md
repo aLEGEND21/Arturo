@@ -71,7 +71,8 @@ docker compose up --build
   rules page with the 15-active cap.
 - **Home-screen install** — `app/manifest.ts` plus Apple web-app metadata in
   `app/layout.tsx` name the installed app "Arturo" and reuse the favicon
-  (`app/icon.png`, mirrored as `app/apple-icon.png` and `public/icons/*`).
+  (`app/icon.png`, copied verbatim to `app/apple-icon.png` and
+  `public/icons/*`; iOS scales icons better from a large source).
 - `GET /health` for the uptime monitor (open question 11).
 
 ## Production deploys
