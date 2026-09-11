@@ -206,11 +206,15 @@ textarea.input { min-height: 90px; resize: vertical; }
 @media (max-width: 768px) {
   .task-row {
     display: grid; grid-template-columns: var(--row-cols);
-    column-gap: 10px; row-gap: 4px;
+    column-gap: 10px; row-gap: 0;
   }
   .task-row > * { grid-row: 1 / span 2; }
   .task-row-text { grid-row: 1; grid-column: var(--text-col); }
   .task-row-meta { grid-row: 2; grid-column: var(--text-col); }
+  /* No row gap: a plain due date then sits as close to the line above as
+     the description sits to the title. A line with a chip gets the gap
+     back so the chip's box doesn't crowd the text above it. */
+  .task-row-meta:has(> .tag) { margin-top: 4px; }
   .task-row > :last-child { grid-column: -2; }
 }
 
