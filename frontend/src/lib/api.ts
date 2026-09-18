@@ -19,15 +19,32 @@ export function patchTaskCache(id: number, fields: Partial<Task>) {
   );
 }
 
-// Optimistically append a (usually temporary) task to the cached lists it
-// belongs in: the today view only shows today-flagged tasks.
+// Mirror of the server's placement for a task created on the today list:
+// the top, except that open today tasks due sooner stay above it. Deadlines
+// are naive local strings, so lexical order is chronological; no deadline
+// counts as due last. Every cached list is ordered by position, so inserting
+// before the same anchor row keeps them consistent until revalidation.
+function insertForToday(curr: Task[], task: Task): Task[] {
+  const at = curr.findIndex((t) => {
+    if (t.recurring || !t.today_flag || t.state === "done" || t.state === "dropped") return false;
+    const sooner = t.deadline !== null && (task.deadline === null || t.deadline < task.deadline);
+    return !sooner;
+  });
+  return at === -1 ? [...curr, task] : [...curr.slice(0, at), task, ...curr.slice(at)];
+}
+
+// Optimistically add a (usually temporary) task to the cached lists it
+// belongs in: the today view only shows today-flagged tasks. Backlog tasks
+// append; today tasks slot in where the server will put them.
 export function addTaskCache(task: Task) {
+  const placeForToday = task.today_flag && !task.recurring;
   swrMutate(
     (key) =>
       typeof key === "string" &&
       key.startsWith("/api/tasks?") &&
       (task.today_flag || !key.includes("view=today")),
-    (curr: Task[] | undefined) => (curr ? [...curr, task] : curr),
+    (curr: Task[] | undefined) =>
+      curr ? (placeForToday ? insertForToday(curr, task) : [...curr, task]) : curr,
     { revalidate: false }
   );
 }
@@ -50,13 +67,13 @@ export function removeTaskCache(id: number) {
 }
 
 // Mirror of removeFromTodayCache: a task promoted from the backlog is not in
-// the today cache yet, so patching it there does nothing. Append it (once) so
-// it shows on the today list before revalidation.
+// the today cache yet, so patching it there does nothing. Insert it (once)
+// where the server will place it so it shows before revalidation.
 export function addToTodayCache(task: Task) {
   swrMutate(
     (key) => typeof key === "string" && key.includes("view=today"),
     (curr: Task[] | undefined) =>
-      curr && !curr.some((t) => t.id === task.id) ? [...curr, task] : curr,
+      curr && !curr.some((t) => t.id === task.id) ? insertForToday(curr, task) : curr,
     { revalidate: false }
   );
 }
@@ -72,7 +89,8 @@ export function removeFromTodayCache(id: number) {
 }
 
 // Placeholder for optimistic task creation: negative id so it can't collide
-// with a real one, max position so it sorts last like the server would place it.
+// with a real one, max position so it sorts last where lists sort by position
+// (addTaskCache places today tasks by list order, not position).
 let tempTaskSeq = -1;
 export function makeTempTask(fields: Partial<Task>): Task {
   return {

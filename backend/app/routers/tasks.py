@@ -59,9 +59,30 @@ def list_tasks(
     return [row_to_task(r) for r in conn.execute(sql, params).fetchall()]
 
 
+def today_insert_position(conn: sqlite3.Connection, deadline: Optional[str]) -> int:
+    """Position for a task joining the today list (created there or promoted
+    by hand): the top, except that
+    open tasks due sooner keep their place above it. Deadlines are naive
+    local strings, so lexical order is chronological; a task without one
+    counts as due last. Frees the slot by shifting everything at or below
+    it down one, so relative order elsewhere (the backlog) is untouched.
+    Falls back past the current maximum when every open today task is due
+    sooner or the list is empty."""
+    rows = conn.execute(
+        """SELECT position, deadline FROM tasks
+           WHERE today_flag = 1 AND recurring = 0 AND state NOT IN ('done','dropped')
+           ORDER BY position ASC, id ASC"""
+    ).fetchall()
+    for r in rows:
+        sooner = r["deadline"] is not None and (deadline is None or r["deadline"] < deadline)
+        if not sooner:
+            conn.execute("UPDATE tasks SET position = position + 1 WHERE position >= ?", (r["position"],))
+            return r["position"]
+    return conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0] + 1
+
+
 @router.post("", status_code=201)
 def create_task(body: TaskCreate, conn: sqlite3.Connection = Depends(db_dep)):
-    max_pos = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0]
     today_flag = 1 if (body.today or body.recurring) else 0
     deadline = body.deadline
     if body.today and not body.recurring and deadline is None:
@@ -70,12 +91,16 @@ def create_task(body: TaskCreate, conn: sqlite3.Connection = Depends(db_dep)):
         # dashboard's datetime picker saves.
         tz = ZoneInfo(conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0])
         deadline = datetime.now(tz).strftime("%Y-%m-%dT23:59")
+    if body.today and not body.recurring:
+        position = today_insert_position(conn, deadline)
+    else:
+        position = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0] + 1
     cur = conn.execute(
         """INSERT INTO tasks (title, notes, handling, position, starred, recurring, board_id,
                               deadline, commitment_at, effort, state, today_flag, source, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            body.title, body.notes, body.handling, max_pos + 1, int(body.starred),
+            body.title, body.notes, body.handling, position, int(body.starred),
             int(body.recurring), body.board_id, deadline, body.commitment_at,
             body.effort, body.state, today_flag, body.source, now_iso(),
         ),
@@ -138,13 +163,11 @@ def update_task(task_id: int, body: TaskUpdate, conn: sqlite3.Connection = Depen
         sets.append("today_flag = ?")
         params.append(int(today_flag))
         if today_flag:
-            # A manually promoted task joins the bottom of the today list
-            # rather than slotting in by its (creation-order) position: the
-            # tasks already there are due sooner. Rollover promotions still
-            # land at the top.
-            max_pos = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0]
+            # A manually promoted task is placed like a new today task: the
+            # top, below any open today task due sooner. Uses the deadline
+            # this same PATCH may be setting.
             sets.append("position = ?")
-            params.append(max_pos + 1)
+            params.append(today_insert_position(conn, fields.get("deadline", task["deadline"])))
         log_event(
             conn, task_id,
             "promoted" if today_flag else "deferred",
