@@ -3,15 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
-import { API_BASE, Me, StatsSummary, api, fetcher } from "@/lib/api";
+import { API_BASE, Me, api, fetcher } from "@/lib/api";
 
 export function Nav() {
   // The login page has no session, so nothing here would load; render
   // nothing rather than a bar full of placeholders (and no 401 bounces).
   const onLogin = usePathname() === "/login";
-  const { data: stats } = useSWR<StatsSummary>(onLogin ? null : "/api/stats/summary", fetcher, {
-    refreshInterval: 60_000,
-  });
   const { data: me } = useSWR<Me>(onLogin ? null : "/api/auth/me", fetcher);
   if (onLogin) return null;
 
@@ -29,33 +26,8 @@ export function Nav() {
     <header style={{ borderBottom: "1px solid var(--color-divider)" }}>
       <div className="nav mx-auto w-full max-w-[1280px]">
         <Link href="/" className="nav-brand">
-          ARTURO DASHBOARD
+          DASHBOARD
         </Link>
-        <span
-          className="text-muted"
-          style={{
-            fontSize: 12,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          {stats
-            ? `${stats.open_tasks} open · 7-day avg ${stats.seven_day_avg}/day`
-            : "…"}
-        </span>
         {/* The backend sets Content-Disposition, so a plain link downloads
             the file — no fetch, no blob, and it works both in dev (straight
             to the API origin) and behind the compose proxy. */}

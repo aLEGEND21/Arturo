@@ -60,7 +60,7 @@ docker compose up --build
   deadline/commitment/overdue, promotions land at the top.
   Manual trigger: `POST /api/jobs/rollover`.
 - **Logical day boundary (4am)** — the working day ends at rollover, not midnight.
-  Day history, stats, and the dashboard's "Today"/"Yesterday" all treat a task
+  Day history and the dashboard's "Today"/"Yesterday" all treat a task
   finished at 1am as the previous day's work. Backend: `app/clock.py`;
   frontend: `logicalDay()` in `lib/api.ts`.
 - **Sweep job (3am + startup)** — expires context notes, kills notes on closed tasks,

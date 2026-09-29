@@ -311,7 +311,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 .nav {
   display: flex; align-items: center; gap: var(--space-4);
   /* Horizontal padding matches the dashboard grid gutter so the brand and
-     stats line up with the column edges below. */
+     buttons line up with the column edges below. */
   padding: var(--space-4) var(--page-pad-x);
 }
 .nav-brand {
@@ -326,8 +326,8 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* Tighter than a standalone .btn: the nav is a compact strip, so the
    Export button sits closer to its label than a dialog button would. */
 .nav .btn { padding: calc(var(--space-1) * 1.5) var(--space-3); }
-/* Brand + stats + Export share one line, and on a phone the label is what
-   has to give: the button collapses to its icon and keeps its accessible
+/* Brand, Export, and Sign out share one line, and on a phone the labels
+   are what has to give: each button collapses to its icon and keeps its accessible
    name from aria-label. */
 @media (max-width: 768px) {
   .nav .btn-label { display: none; }

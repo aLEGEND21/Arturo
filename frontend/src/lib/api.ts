@@ -207,13 +207,6 @@ export interface DayHistory {
   tasks: HistoryTask[];
 }
 
-export interface StatsSummary {
-  done_today: number;
-  today_total: number;
-  seven_day_avg: number;
-  open_tasks: number;
-}
-
 /** The signed-in user, from GET /api/auth/me. */
 export interface Me {
   id: number;

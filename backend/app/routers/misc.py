@@ -129,7 +129,7 @@ def get_settings(conn: sqlite3.Connection = Depends(db_dep)):
 def update_settings(body: SettingsUpdate, conn: sqlite3.Connection = Depends(db_dep)):
     fields = body.model_dump(exclude_unset=True)
     # An invalid timezone would crash every scheduled job (rollover, sweep,
-    # backup) and the stats endpoint at ZoneInfo() time — refuse it here.
+    # backup) and day history at ZoneInfo() time — refuse it here.
     if fields.get("timezone") is not None:
         try:
             ZoneInfo(fields["timezone"])
@@ -236,41 +236,6 @@ def day_history(day: str, conn: sqlite3.Connection = Depends(db_dep)):
         out.append(e)
     out.sort(key=lambda e: (e["recurring"], 0 if e["status"] == "done" else 1, e["title"].lower()))
     return {"date": day, "tasks": out}
-
-
-# --- stats ---
-
-@router.get("/stats/summary")
-def stats_summary(conn: sqlite3.Connection = Depends(db_dep)):
-    tz_name = conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0]
-    tz = ZoneInfo(tz_name)
-    day_start = logical_day_start(logical_today(tz), tz)
-
-    def completed_between(start: datetime, end: datetime) -> int:
-        return conn.execute(
-            """SELECT COUNT(*) FROM task_events e
-               JOIN tasks t ON t.id = e.task_id
-               WHERE e.event_type = 'completed' AND t.recurring = 0
-                 AND e.created_at >= ? AND e.created_at < ?""",
-            (start.astimezone(ZoneInfo("UTC")).isoformat(), end.astimezone(ZoneInfo("UTC")).isoformat()),
-        ).fetchone()[0]
-
-    done_today = completed_between(day_start, day_start + timedelta(days=1))
-    week_total = completed_between(day_start - timedelta(days=6), day_start + timedelta(days=1))
-
-    today_total = conn.execute(
-        "SELECT COUNT(*) FROM tasks WHERE today_flag = 1 AND recurring = 0 AND state != 'dropped'"
-    ).fetchone()[0]
-    open_backlog = conn.execute(
-        "SELECT COUNT(*) FROM tasks WHERE state NOT IN ('done','dropped')"
-    ).fetchone()[0]
-
-    return {
-        "done_today": done_today,
-        "today_total": today_total,
-        "seven_day_avg": round(week_total / 7, 1),
-        "open_tasks": open_backlog,
-    }
 
 
 # --- export ---
