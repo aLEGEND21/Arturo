@@ -1,8 +1,13 @@
-# Arturo — AI Accountability Assistant (Phase 0)
+# Arturo — AI Accountability Assistant
 
-Task management dashboard + backend from the design doc. This is the Phase 0 slice:
-no Discord bot, no LLM calls — the schema, event log, promotion job, and dashboard
-they'll plug into.
+A personal task system built around one idea: the day has a fixed shape. Tasks
+live on a today list or in the backlog, an event log records everything that
+happens to them, and a 4am rollover closes the working day, carries unfinished
+work forward, and promotes what is due next. The dashboard at
+[tasks.arnavm.com](https://tasks.arnavm.com) is the front door; sign-in is by
+Discord. Every table the Discord bot and the LLM layer need is already in
+place and populated by the dashboard, so those arrive as additions, not
+rewrites (see [Future improvements](#future-improvements)).
 
 ## Layout
 
@@ -31,7 +36,9 @@ npm run dev
 
 The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8000`).
 The backend reads `ARTURO_DB` (defaults to `backend/data/arturo.db`, created on boot)
-and `TZ` (defaults to `America/New_York`) for job scheduling.
+and `TZ` (defaults to `America/New_York`) for job scheduling, plus the Discord
+login settings from `backend/.env` (copy `backend/.env.example`; see
+[Sign-in](#sign-in)).
 
 Or run the whole stack with Docker Compose (frontend on port 3000; the backend is
 not published — the Next server proxies `/api` to it over the compose network):
@@ -42,9 +49,9 @@ docker compose up --build
 
 ## What's implemented
 
-- **Full schema from §5** — `tasks`, append-only `task_events`, `context_notes`,
-  `rules`, `boards`, `settings`, plus `messages`/`llm_calls` (empty until Phase 1/2).
-  WAL mode, foreign keys on.
+- **Schema** — `tasks`, append-only `task_events`, `context_notes`, `rules`,
+  `boards`, `settings`, `users`, `sessions`, plus `messages` and `llm_calls`
+  for the bot and LLM layers. WAL mode, foreign keys on.
 - **Tasks API** — CRUD, per-field event logging (`created`, `completed`, `promoted`,
   `deferred`, `committed`, `state_changed`, `dropped`), drag-reorder endpoint that
   reuses position slots so backlog ordering survives a today-list reorder.
@@ -79,7 +86,85 @@ docker compose up --build
   `app/layout.tsx` name the installed app "Arturo" and reuse the favicon
   (`app/icon.png`, copied verbatim to `app/apple-icon.png` and
   `public/icons/*`; iOS scales icons better from a large source).
-- `GET /health` for the uptime monitor (open question 11).
+- **Discord sign-in** — every API route except `/health` and `/api/auth/*`
+  requires a session cookie. See [Sign-in](#sign-in).
+- **Versioned schema migrations** — `PRAGMA user_version` gates an ordered
+  list in `app/db.py`; boot applies whatever is missing, snapshotting the
+  database first. See [Schema migrations](#schema-migrations).
+- `GET /health` for the uptime monitor and the deploy script's readiness probe.
+
+## Sign-in
+
+Access is by Discord OAuth (`identify` scope only), implemented in
+`backend/app/auth.py`. `GET /api/auth/login` bounces to Discord;
+`GET /api/auth/callback` swaps the code for the profile, checks the Discord
+user id against `ARTURO_ALLOWED_DISCORD_IDS`, upserts the `users` row, and
+sets an HttpOnly `arturo_session` cookie (30 days, SHA-256 of the token in the
+`sessions` table). `GET /api/auth/me` returns the signed-in user;
+`POST /api/auth/logout` ends the session. The Next server (`src/proxy.ts`)
+sends any page load without the cookie to `/login`; the backend answers 401
+on API calls, which `lib/api.ts` turns into the same redirect.
+
+Configuration lives in three files, all gitignored except the example:
+
+- `backend/.env.example` documents every key.
+- `backend/.env` is local dev, loaded automatically by uvicorn on the host
+  and by `docker-compose.yml`.
+- `backend/.env.production` is the prod copy, kept locally and shipped to
+  the VPS as `/opt/arturo/.env` (see [Production deploys](#production-deploys)).
+
+The keys:
+
+- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` from the Discord developer
+  portal. Register each redirect URI there exactly:
+  `http://localhost:8000/api/auth/callback` (uvicorn on the host),
+  `http://localhost:3000/api/auth/callback` (local compose), and
+  `https://tasks.arnavm.com/api/auth/callback` (prod).
+- `DISCORD_REDIRECT_URI` and `ARTURO_APP_URL` — the callback and the
+  dashboard origin. In prod both are the public origin. `docker-compose.yml`
+  overrides them for the local proxy setup.
+- `ARTURO_ALLOWED_DISCORD_IDS` — comma-separated Discord user ids. Anyone
+  else signs in with Discord fine and is then refused with
+  `/login?error=not_allowed`. The `settings.discord_user_id` column is
+  honoured too, so the future bot and the dashboard share one source.
+
+Only one person is allowed for now, but nothing is single-user by design:
+`users` is keyed on the Discord id so every table can gain a `user_id`
+reference later, and the allowlist is the only thing to replace with an
+invite flow. The rollover, sweep, and backup jobs will stay global on
+Eastern time for every user; there is no per-user timezone.
+
+The `POST /api/jobs/*` manual triggers require a session too. The scheduled
+runs inside the process do not go through HTTP and are unaffected.
+
+## Schema migrations
+
+`app/db.py` holds an ordered `MIGRATIONS` list of `(version, script)`. On
+boot `init_db` reads `PRAGMA user_version` and applies every entry above it,
+each with its version stamp inside one transaction, so a crash mid-way leaves
+the file at the previous version and the migration re-runs next boot. A
+database from before versioning reads as 0: the baseline is all
+`IF NOT EXISTS`, so it passes through untouched and is stamped 1.
+
+Before touching a database that already has tables, `init_db` writes
+`backups/arturo-pre-migration-v<from>-to-v<to>-<timestamp>.db` next to the
+nightly snapshots, so every migration has a restore point no matter when the
+deploy lands relative to the 3:55am job. Only the latest pre-migration
+snapshot is kept, and it does not count toward the 14 nightly backups.
+
+Rules for adding a migration:
+
+- Append, never edit an applied entry. Bump the version by one.
+- Additive only: `ALTER TABLE ... ADD COLUMN` (nullable or defaulted), new
+  tables, backfills. Never drop or rename in the same release that adds — if
+  `deploy.sh` rolls back to the previous image, that code must still open
+  the newer file. Retire columns a release later.
+- Test against a copy of prod first: `scp` the file down, run the backend
+  with `ARTURO_DB` pointing at the copy, compare row counts.
+
+Deploys never touch the data: the database lives on the VPS bind mount
+(`/opt/arturo/data`), outside the images, and `deploy.sh` only swaps
+containers.
 
 ## Production deploys
 
@@ -91,6 +176,26 @@ the frontend proxy, and automatically restores the previous release if the new
 one won't serve. `scripts/rollback.sh` swaps back manually.
 
 - Repo secrets required: `DEPLOY_SSH_KEY`, `DEPLOY_HOST`, `DEPLOY_USER`.
+- The VPS needs Docker Compose 2.24 or newer (it runs 2.27). The prod
+  compose file uses the long `env_file` syntax with `required: false`, which
+  older versions cannot parse. Because `deploy.sh` copies the new compose
+  file before starting, an older Compose would break the automatic rollback
+  too.
+- `/opt/arturo/.env` on the VPS holds the Discord OAuth settings (see
+  [Sign-in](#sign-in)). The workflow never writes it, so it survives
+  deploys. Create or update it from the local prod copy:
+
+  ```sh
+  scp backend/.env.production vps:/opt/arturo/.env
+  ```
+
+  Then restart the backend so it picks up the change
+  (`cd /opt/arturo && TAG=$(cat current) docker compose -f docker-compose.prod.yml up -d`).
+  If the file is missing, the stack still starts but `/api/auth/login`
+  answers 503.
+- Rolling back to a release from before Discord sign-in removes login
+  entirely: those images have no auth, so the dashboard is public again
+  until you redeploy.
 - The frontend joins the external `nginx-proxy` Docker network; point nginx at
   `proxy_pass http://arturo-frontend:3000;`. The backend stays on an internal
   network only — nothing is published to the host.
@@ -121,8 +226,29 @@ docker compose up -d                    # start again
 The WAL/SHM sidecars must go with the old database — restoring the `.db` file
 while stale sidecars remain can corrupt the restored copy.
 
+## Future improvements
+
+Planned, roughly in order. Each builds on tables and hooks that already exist.
+
+- **Discord bot** — the conversational side of Arturo: check-ins, nudges,
+  capturing tasks from chat. Writes to `messages`, identifies people by the
+  same Discord id the dashboard signs in with, and respects the work-hours,
+  quiet-hours, and message-cap columns in `settings`.
+- **LLM layer** — prompt assembly from the active rules and context notes,
+  every call logged to `llm_calls` with tokens and latency. Nudge wording,
+  handling suggestions, and end-of-day summaries.
+- **Multiple users** — a `user_id` column on tasks, rules, boards, context
+  notes, and messages, backfilled to the existing user; per-user settings
+  rows; every query and the position logic scoped by user; the env allowlist
+  replaced by an invite flow. Rollover, sweep, and backup stay global on
+  Eastern time.
+- **Off-host backups** — sync `/opt/arturo/data/backups` somewhere that
+  survives the VPS disk.
+- **Settings UI** — the `settings` row is only editable through the API,
+  which the prod proxy blocks; a page on the dashboard should own it.
+
 ## Notes
 
-- The DB currently holds a few sample tasks from smoke testing; delete
-  `backend/data/arturo.db*` for a clean start (it recreates on boot).
+- Delete `backend/data/arturo.db*` for a clean local start (it recreates on
+  boot, at the current schema version).
 - Interactive API docs at `http://localhost:8000/docs`.

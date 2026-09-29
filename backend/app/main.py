@@ -5,9 +5,11 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import auth
+from .auth import require_user
 from .clock import DAY_START_HOUR
 from .db import init_db
 from .jobs.maintenance import run_backup, run_rollover, run_sweep
@@ -39,12 +41,18 @@ app = FastAPI(title="Arturo API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(","),
+    # Local dev hits the API origin directly, so the session cookie only
+    # travels if credentials are allowed. Behind the compose proxy every call
+    # is same-origin and CORS never applies.
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(tasks.router)
-app.include_router(misc.router)
+# Only /health and the auth routes are reachable without a session.
+app.include_router(auth.router)
+app.include_router(tasks.router, dependencies=[Depends(require_user)])
+app.include_router(misc.router, dependencies=[Depends(require_user)])
 
 
 @app.get("/health")
@@ -52,16 +60,16 @@ def health():
     return {"ok": True}
 
 
-@app.post("/api/jobs/rollover")
+@app.post("/api/jobs/rollover", dependencies=[Depends(require_user)])
 def trigger_rollover():
     return run_rollover()
 
 
-@app.post("/api/jobs/sweep")
+@app.post("/api/jobs/sweep", dependencies=[Depends(require_user)])
 def trigger_sweep():
     return run_sweep()
 
 
-@app.post("/api/jobs/backup")
+@app.post("/api/jobs/backup", dependencies=[Depends(require_user)])
 def trigger_backup():
     return run_backup()

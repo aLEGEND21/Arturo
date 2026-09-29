@@ -32,7 +32,10 @@ def run_backup() -> dict:
         src.close()
 
     pruned = 0
-    for old in sorted(backups_dir.glob("arturo-*.db"))[:-BACKUPS_KEPT]:
+    # Dated nightly files only (arturo-YYYY-MM-DD.db). The pre-migration
+    # snapshot from db.py lives in the same folder but manages itself; it
+    # must not count toward, or be pruned by, the nightly rotation.
+    for old in sorted(backups_dir.glob("arturo-[0-9]*.db"))[:-BACKUPS_KEPT]:
         old.unlink()
         pruned += 1
 

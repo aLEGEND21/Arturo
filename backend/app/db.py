@@ -1,12 +1,23 @@
-"""SQLite access layer. One process owns this file; WAL mode, foreign keys on."""
+"""SQLite access layer. One process owns this file; WAL mode, foreign keys on.
+
+Schema changes are versioned migrations keyed on SQLite's `user_version`
+pragma (see MIGRATIONS). Migrations are additive only: add a column, add a
+table, backfill. Never drop or rename in the same release that adds, so the
+previous image can still open the file if a deploy is rolled back."""
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+log = logging.getLogger("arturo.db")
+
 DB_PATH = Path(os.environ.get("ARTURO_DB", Path(__file__).resolve().parent.parent / "data" / "arturo.db"))
 
+# Migration 1: the Phase 0 baseline. Every statement is IF NOT EXISTS, so a
+# database created before versioning existed (user_version 0) passes through
+# unchanged and is simply stamped as version 1.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
   id              INTEGER PRIMARY KEY,
@@ -120,13 +131,93 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+# Migration 2: Discord login. `users` is keyed on the Discord id so the future
+# bot and the dashboard identify the same person; it is also the table every
+# per-user column will reference when the data goes multi-tenant. Sessions
+# hold a hash of the cookie token, never the token itself.
+AUTH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY,
+  discord_id    TEXT NOT NULL UNIQUE,
+  username      TEXT NOT NULL,
+  display_name  TEXT,
+  avatar        TEXT,
+  created_at    TEXT NOT NULL,
+  last_login_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id          INTEGER PRIMARY KEY,
+  token_hash  TEXT NOT NULL UNIQUE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_user_id ON sessions(user_id);
+"""
+
+# Ordered (version, script). Each script runs with its version stamp inside
+# one transaction, so a crash mid-migration leaves the file at the previous
+# version and the migration re-runs on the next boot.
+MIGRATIONS: list[tuple[int, str]] = [
+    (1, SCHEMA),
+    (2, AUTH_SCHEMA),
+]
+
+
+def snapshot_before_migration(from_version: int, to_version: int) -> Path | None:
+    """Copy the database next to the nightly backups before its schema
+    changes, so every migration has a restore point regardless of when the
+    deploy landed relative to the 3:55am job. Only the latest snapshot is
+    kept; the nightly job's pruning ignores these files. Skipped for a
+    brand-new file."""
+    if not DB_PATH.exists():
+        return None
+    backups_dir = DB_PATH.parent / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    dest_path = backups_dir / f"arturo-pre-migration-v{from_version}-to-v{to_version}-{stamp}.db"
+    src = sqlite3.connect(DB_PATH)
+    try:
+        dest = sqlite3.connect(dest_path)
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        src.close()
+    # Drop older snapshots only once the new one is safely written.
+    for old in backups_dir.glob("arturo-pre-migration-*.db"):
+        if old != dest_path:
+            old.unlink()
+    log.info("pre-migration snapshot: %s", dest_path.name)
+    return dest_path
+
+
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    target = MIGRATIONS[-1][0]
     conn = get_conn()
     try:
         conn.execute("PRAGMA journal_mode = WAL")
-        conn.executescript(SCHEMA)
-        conn.commit()
+        current = conn.execute("PRAGMA user_version").fetchone()[0]
+        if current >= target:
+            return
+        # Version 0 is a fresh file or one from before versioning. The
+        # baseline is a no-op on the latter, but any later migration does
+        # change it, so snapshot whenever real tables already exist.
+        has_tables = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tasks'").fetchone()
+        if has_tables is not None:
+            snapshot_before_migration(current, target)
+        for version, script in MIGRATIONS:
+            if version <= current:
+                continue
+            # executescript commits any pending transaction first, so the
+            # BEGIN/COMMIT pair goes inside the script to make the DDL and
+            # the version stamp atomic.
+            conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {version};\nCOMMIT;")
+            log.info("migrated database to version %d", version)
     finally:
         conn.close()
 

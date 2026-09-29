@@ -3,9 +3,17 @@ services:
     build: ./backend
     container_name: arturo-backend
     restart: unless-stopped
+    # Discord OAuth credentials + allowlist (see backend/.env.example).
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
       TZ: America/New_York
       ARTURO_DB: /data/arturo.db
+      # Override the host-dev URLs from backend/.env: under compose the
+      # browser only ever sees :3000, and /api/auth/* proxies to the backend.
+      DISCORD_REDIRECT_URI: http://localhost:3000/api/auth/callback
+      ARTURO_APP_URL: http://localhost:3000
     volumes:
       # Bind mount to a real local path — never an overlay layer or network mount (WAL).
       - ./backend/data:/data

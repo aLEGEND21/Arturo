@@ -214,8 +214,31 @@ export interface StatsSummary {
   open_tasks: number;
 }
 
+/** The signed-in user, from GET /api/auth/me. */
+export interface Me {
+  id: number;
+  discord_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+// A 401 means the session cookie is missing or expired (backend auth.py).
+// Send the browser to the login page instead of surfacing it as an API
+// error, unless that is already where we are.
+function handleUnauthorized(res: Response) {
+  if (res.status !== 401 || typeof window === "undefined") return;
+  // A full navigation, not a router push: it drops every SWR cache and any
+  // optimistic state that belonged to the dead session.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  if (window.location.pathname !== "/login") window.location.href = "/login";
+}
+
 export async function fetcher<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
+  // credentials: the cookie only crosses origins in local dev, where the
+  // browser talks to :8000 directly; behind the proxy it is same-origin.
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  handleUnauthorized(res);
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
 }
@@ -227,9 +250,11 @@ export async function api<T>(
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
+    credentials: "include",
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  handleUnauthorized(res);
   if (!res.ok) {
     let detail = `API ${res.status}`;
     try {

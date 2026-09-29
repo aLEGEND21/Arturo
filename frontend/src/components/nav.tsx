@@ -1,13 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
-import { API_BASE, StatsSummary, fetcher } from "@/lib/api";
+import { API_BASE, Me, StatsSummary, api, fetcher } from "@/lib/api";
 
 export function Nav() {
-  const { data: stats } = useSWR<StatsSummary>("/api/stats/summary", fetcher, {
+  // The login page has no session, so nothing here would load; render
+  // nothing rather than a bar full of placeholders (and no 401 bounces).
+  const onLogin = usePathname() === "/login";
+  const { data: stats } = useSWR<StatsSummary>(onLogin ? null : "/api/stats/summary", fetcher, {
     refreshInterval: 60_000,
   });
+  const { data: me } = useSWR<Me>(onLogin ? null : "/api/auth/me", fetcher);
+  if (onLogin) return null;
+
+  async function logout() {
+    try {
+      await api("/api/auth/logout", "POST");
+    } finally {
+      // Full navigation so the SWR caches from this session are dropped.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/login";
+    }
+  }
+
   return (
     <header style={{ borderBottom: "1px solid var(--color-divider)" }}>
       <div className="nav mx-auto w-full max-w-[1280px]">
@@ -66,6 +83,41 @@ export function Nav() {
           </svg>
           <span className="btn-label">Export</span>
         </a>
+        {me ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={logout}
+            aria-label={`Signed in as ${me.display_name}. Sign out`}
+            title={`Signed in as @${me.username} — click to sign out`}
+          >
+            {me.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Discord CDN, tiny, no optimisation needed
+              <img
+                src={me.avatar_url}
+                alt=""
+                width={16}
+                height={16}
+                style={{ borderRadius: "50%" }}
+              />
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+              </svg>
+            )}
+            <span className="btn-label">Sign out</span>
+          </button>
+        ) : null}
       </div>
     </header>
   );

@@ -139,8 +139,20 @@ img { display: block; max-width: 100%; }
 .btn svg { display: block; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
-.btn-primary:hover { background: var(--color-accent-600); }
-.btn-primary:active { background: var(--color-accent-700); }
+/* Two shades down: -600 is within a hair of the base accent and reads as no
+   hover, while anything past -700 is too heavy. The text color is restated
+   because a link-flavoured .btn would otherwise pick up the global a:hover
+   color and vanish into the background. */
+.btn-primary:hover {
+  background: var(--color-accent-700);
+  border-color: var(--color-accent-700);
+  color: var(--color-bg);
+}
+.btn-primary:active {
+  background: var(--color-accent-800);
+  border-color: var(--color-accent-800);
+  color: var(--color-bg);
+}
 .btn-secondary { border-color: var(--color-divider); }
 .btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
@@ -247,6 +259,52 @@ textarea.input { min-height: 90px; resize: vertical; }
   .dashboard-grid { grid-template-columns: 1fr; }
   /* iOS Safari auto-zooms into focused controls under 16px. */
   .input, .add-input, input[type="datetime-local"] { font-size: 16px; }
+}
+
+/* — login page — */
+/* Full-height stage with a faint drafting grid, so the one blueprint frame
+   on it reads as intentional rather than as a lonely card. The nav is not
+   rendered on this route, so the stage owns the whole viewport. Fixed to
+   the viewport rather than sized in flow: the layout's <main> caps content
+   at 1280px, which would cut the grid off with hard edges on wide screens.
+   (100vw would include the scrollbar and cause sideways scroll on Windows.) */
+.login {
+  position: fixed; inset: 0; overflow-y: auto;
+  display: grid; place-items: center;
+  padding: var(--space-8) var(--page-pad-x);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 5%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: center;
+}
+.login-card { width: 100%; max-width: 380px; }
+.login-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.login-mark { flex: none; width: 44px; height: 44px; }
+.login-brand {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 22px; line-height: 1; letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.login-body { display: grid; gap: 16px; padding: 22px 24px; }
+.login-lede { margin: 0; font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.login-btn { width: 100%; padding-block: 11px; font-size: 15px; gap: 9px; }
+.login-alert {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.4;
+  background: #f8dcd8; color: #8f261c;
+  border-left: 3px solid #8f261c;
+}
+.login-alert svg { flex: none; margin-top: 2px; }
+.login-foot {
+  padding: 11px 24px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 12px; line-height: 1.4; text-align: center;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 /* — navigation — */
