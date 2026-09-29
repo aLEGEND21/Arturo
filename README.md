@@ -64,6 +64,12 @@ docker compose up --build
   what was on a past day's list at the end of the day and how it ended (done,
   not finished, missed); tasks moved off or dropped mid-day are omitted. The
   dashboard's ‹ › arrows use it.
+- **JSON export** — `GET /api/export` returns one file holding today's list and
+  every task ever created, done and dropped included, so completed history
+  survives the export (the backlog view hides those rows). State and
+  `completed_at` live on each task, so no `task_events` audit trail is
+  embedded. Served with `Content-Disposition`, so the dashboard's nav-bar
+  Export link downloads it with no client-side code.
 - **Dashboard** — Today view (pinned recurring section with streaks, dnd-kit
   reordering with optimistic updates, done-count), Backlog (board filter, soonest
   deadline first), quick-add with date shortcuts, task drawer (state, notes,

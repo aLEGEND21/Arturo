@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from ..clock import logical_date, logical_day_start, logical_today
 from ..db import db_dep, now_iso
@@ -14,6 +15,7 @@ from ..schemas import (
     RuleUpdate,
     SettingsUpdate,
 )
+from .tasks import TASK_SELECT, row_to_task
 
 router = APIRouter(prefix="/api", tags=["misc"])
 
@@ -269,3 +271,45 @@ def stats_summary(conn: sqlite3.Connection = Depends(db_dep)):
         "seven_day_avg": round(week_total / 7, 1),
         "open_tasks": open_backlog,
     }
+
+
+# --- export ---
+
+@router.get("/export")
+def export_tasks(conn: sqlite3.Connection = Depends(db_dep)):
+    """The today list plus every task ever created, as one JSON download.
+
+    The all-tasks list is deliberately unfiltered: the backlog view hides
+    done and dropped rows, so reusing it would drop exactly the history
+    this export exists to keep. Every row already carries state and
+    completed_at, so what got finished is on the task itself and the
+    per-task event log stays out of the file.
+    """
+    tz_name = conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0]
+    today = [
+        row_to_task(r)
+        for r in conn.execute(
+            f"{TASK_SELECT} WHERE t.today_flag = 1 AND t.state != 'dropped'"
+            " ORDER BY t.position ASC, t.id ASC"
+        ).fetchall()
+    ]
+    tasks = [row_to_task(r) for r in conn.execute(f"{TASK_SELECT} ORDER BY t.id ASC").fetchall()]
+    # Logical day (clock.py), so an export pulled at 2am is filed under the
+    # day it belongs to rather than the calendar date that just started.
+    filename = f"arturo-export-{logical_today(ZoneInfo(tz_name)).isoformat()}.json"
+    payload = {
+        "exported_at": now_iso(),
+        "timezone": tz_name,
+        "today": today,
+        "tasks": tasks,
+    }
+    # Pretty-printed to be read, not just parsed. The shape is a fixed three
+    # levels — root, list, flat task — so indent=4 stays legible; it is the
+    # deeper structures that need to drop to 2 to avoid marching off the
+    # right edge. ensure_ascii=False keeps non-ASCII titles readable rather
+    # than escaping them to \uXXXX.
+    return Response(
+        json.dumps(payload, indent=4, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -261,8 +261,20 @@ textarea.input { min-height: 90px; resize: vertical; }
   font-size: 18px; margin-right: auto; letter-spacing: 0.06em;
   color: var(--color-text); text-decoration: none;
 }
-.nav a { color: inherit; text-decoration: none; font-size: 14px; }
-.nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent); }
+/* Plain nav links only — a .btn in the nav keeps its own button styling,
+   which the accent hover colour here would otherwise override. */
+.nav a:not(.btn) { color: inherit; text-decoration: none; font-size: 14px; }
+.nav a:not(.btn):hover, .nav a:not(.btn)[aria-current='page'] { color: var(--color-accent); }
+/* Tighter than a standalone .btn: the nav is a compact strip, so the
+   Export button sits closer to its label than a dialog button would. */
+.nav .btn { padding: calc(var(--space-1) * 1.5) var(--space-3); }
+/* Brand + stats + Export share one line, and on a phone the label is what
+   has to give: the button collapses to its icon and keeps its accessible
+   name from aria-label. */
+@media (max-width: 768px) {
+  .nav .btn-label { display: none; }
+  .nav .btn { padding-inline: var(--space-2); }
+}
 
 /* — tables — */
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
