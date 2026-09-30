@@ -60,23 +60,27 @@ export function TaskDrawer({
 }) {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  // Typing live-patches task.notes in the list caches, so the last value
-  // actually persisted to the server has to be tracked separately.
+  // Typing live-patches task.title/notes in the list caches, so the last
+  // values actually persisted to the server have to be tracked separately.
+  const [savedTitle, setSavedTitle] = useState("");
   const [savedNotes, setSavedNotes] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const dueInputRef = useRef<HTMLInputElement>(null);
-  // Notes save on blur; Escape closes without blurring, so the key handler
-  // needs the latest draft to flush it.
+  // Title and notes save on blur; Escape closes without blurring, so the key
+  // handler needs the latest drafts to flush them.
+  const titleRef = useRef(title);
   const notesRef = useRef(notes);
   useEffect(() => {
+    titleRef.current = title;
     notesRef.current = notes;
-  }, [notes]);
+  }, [title, notes]);
 
   // Reset form state when a different task opens (render-time adjustment,
   // per react.dev "you might not need an effect").
   if (task && task.id !== editingId) {
     setEditingId(task.id);
     setTitle(task.title);
+    setSavedTitle(task.title);
     setNotes(task.notes ?? "");
     setSavedNotes(task.notes ?? "");
   } else if (!task && editingId !== null) {
@@ -92,9 +96,15 @@ export function TaskDrawer({
     if (!task) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape" || !task) return;
-      const draft = notesRef.current;
-      if (draft !== savedNotes) {
-        api(`/api/tasks/${task.id}`, "PATCH", { notes: draft || null })
+      const fields: Record<string, unknown> = {};
+      const titleDraft = titleRef.current.trim();
+      if (titleDraft && titleDraft !== savedTitle) fields.title = titleDraft;
+      // A blank title never saves; undo its live cache patch instead.
+      else if (!titleDraft) patchTaskCache(task.id, { title: savedTitle });
+      const notesDraft = notesRef.current;
+      if (notesDraft !== savedNotes) fields.notes = notesDraft || null;
+      if (Object.keys(fields).length) {
+        api(`/api/tasks/${task.id}`, "PATCH", fields)
           .then(() => revalidateAll())
           .catch((err) =>
             toast.error(err instanceof Error ? err.message : "Update failed")
@@ -104,7 +114,7 @@ export function TaskDrawer({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [task, onClose, savedNotes]);
+  }, [task, onClose, savedTitle, savedNotes]);
 
   if (!task) return null;
 
@@ -135,10 +145,15 @@ export function TaskDrawer({
     if (!task) return;
     const t = title.trim();
     if (!t) {
-      setTitle(task.title); // blank reverts, never saves
+      // Blank reverts, never saves.
+      setTitle(savedTitle);
+      patchTaskCache(task.id, { title: savedTitle });
       return;
     }
-    if (t !== task.title) patch({ title: t });
+    if (t !== savedTitle) {
+      patch({ title: t });
+      setSavedTitle(t);
+    }
   }
 
   // datetime-local wants "YYYY-MM-DDTHH:MM"; deadlines may be date-only.
@@ -189,9 +204,12 @@ export function TaskDrawer({
               {/* Reads as the h4 heading; only the caret betrays it's editable. */}
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  const t = e.target.value.trim();
+                  if (t) patchTaskCache(task.id, { title: t });
+                }}
                 onBlur={saveTitle}
-                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
                 aria-label="Task title"
                 className="mt-1 block w-full border-none bg-transparent p-0 font-heading text-[20px] leading-[1.12] font-semibold tracking-[-0.015em] text-ink caret-accent outline-none"
               />
