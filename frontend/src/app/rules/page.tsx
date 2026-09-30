@@ -4,7 +4,9 @@ import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import { toast } from "sonner";
 import { Rule, api, fetcher } from "@/lib/api";
-import { Blueprint, Square } from "@/components/industry";
+import { Blueprint, Button, Square } from "@/components/industry";
+import { inputClass } from "@/lib/ui";
+import { cn } from "@/lib/utils";
 
 export default function RulesPage() {
   const { data: rules, error } = useSWR<Rule[]>("/api/rules", fetcher);
@@ -38,70 +40,57 @@ export default function RulesPage() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 720 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
-        <h3 style={{ margin: 0 }}>Rules</h3>
-        <span className="text-muted" style={{ fontSize: 12 }}>
+    <div className="max-w-[720px] p-5">
+      <div className="mb-1 flex items-baseline gap-3">
+        <h3 className="m-0">Rules</h3>
+        <span className="text-[12px] text-muted">
           standing instructions, injected verbatim · max 15 active
         </span>
       </div>
 
       {error ? (
-        <div style={{ margin: "14px 0 0", padding: "9px 14px", border: "1px solid var(--color-divider)", fontSize: 13 }}>
+        <div className="mt-3.5 border border-divider px-3.5 py-[9px] text-[13px]">
           Can&apos;t reach the API — is the backend running on port 8000?
         </div>
       ) : null}
 
-      <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
+      <div className="my-3.5 flex gap-2">
         <input
-          className="input"
+          className={inputClass}
           placeholder='e.g. "never nudge before noon on weekends"'
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addRule()}
         />
-        <button className="btn btn-primary" onClick={addRule} disabled={!text.trim()}>
+        <Button variant="primary" onClick={addRule} disabled={!text.trim()}>
           Add
-        </button>
+        </Button>
       </div>
 
       <Blueprint>
         {(rules ?? []).map((r, i) => (
           <div
             key={r.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 14px",
-              borderBottom:
-                i === (rules ?? []).length - 1 ? "none" : "1px solid var(--color-divider)",
-            }}
+            className={cn(
+              "flex items-center gap-2.5 px-3.5 py-2.5",
+              i !== (rules ?? []).length - 1 && "border-b border-divider"
+            )}
           >
             <Square checked={r.active} onToggle={() => toggle(r)} label={r.active ? "Deactivate rule" : "Activate rule"} />
-            <span
-              style={{
-                flex: 1,
-                fontSize: 14,
-                textDecoration: r.active ? undefined : "line-through",
-                color: r.active ? undefined : "var(--color-neutral-500)",
-              }}
-            >
+            <span className={cn("flex-1 text-[14px]", !r.active && "text-neutral-500 line-through")}>
               {r.text}
             </span>
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 12, padding: "2px 8px", color: "var(--color-neutral-600)" }}
+            <Button
+              variant="ghost"
+              className="px-2 py-0.5 text-[12px] text-neutral-600"
               onClick={() => remove(r)}
             >
               Delete
-            </button>
+            </Button>
           </div>
         ))}
         {(rules ?? []).length === 0 ? (
-          <div className="text-muted" style={{ padding: 14, fontSize: 13 }}>
-            No rules yet.
-          </div>
+          <div className="p-3.5 text-[13px] text-muted">No rules yet.</div>
         ) : null}
       </Blueprint>
     </div>

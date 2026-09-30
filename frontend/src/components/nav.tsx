@@ -4,6 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { API_BASE, Me, api, fetcher } from "@/lib/api";
+import { buttonClass } from "@/lib/ui";
+
+// Tighter than a standalone button: the nav is a compact strip. On phones
+// the labels are what has to give, so each button collapses to its icon and
+// keeps its accessible name from aria-label.
+const navButton = "py-[5.1px] px-[10.2px] phone:px-[6.8px]";
+const navLabel = "phone:hidden";
 
 export function Nav() {
   // The login page has no session, so nothing here would load; render
@@ -23,18 +30,24 @@ export function Nav() {
   }
 
   return (
-    <header style={{ borderBottom: "1px solid var(--color-divider)" }}>
-      <div className="nav mx-auto w-full max-w-[1280px]">
-        <Link href="/" className="nav-brand">
+    <header className="border-b border-divider">
+      {/* Horizontal padding matches the dashboard grid gutter so the brand
+          and buttons line up with the column edges below. */}
+      <div className="mx-auto flex w-full max-w-[1280px] items-center gap-[13.6px] px-page py-[13.6px]">
+        <Link
+          href="/"
+          className="mr-auto font-heading text-[14px] font-semibold tracking-[0.06em] text-inherit no-underline hover:text-accent"
+        >
           DASHBOARD
         </Link>
         {/* The backend sets Content-Disposition, so a plain link downloads
             the file — no fetch, no blob, and it works both in dev (straight
-            to the API origin) and behind the compose proxy. */}
+            to the API origin) and behind the compose proxy. As a link it
+            takes the link hover color on its label. */}
         <a
           href={`${API_BASE}/api/export`}
           download
-          className="btn btn-secondary"
+          className={buttonClass({ variant: "secondary", className: `${navButton} hover:text-accent-700` })}
           aria-label="Export tasks as JSON"
           title="Download today's list and every task ever, as JSON"
         >
@@ -53,25 +66,19 @@ export function Nav() {
             <polyline points="7 10 12 15 17 10" />
             <path d="M4 20h16" />
           </svg>
-          <span className="btn-label">Export</span>
+          <span className={navLabel}>Export</span>
         </a>
         {me ? (
           <button
             type="button"
-            className="btn btn-secondary"
+            className={buttonClass({ variant: "secondary", className: navButton })}
             onClick={logout}
             aria-label={`Signed in as ${me.display_name}. Sign out`}
             title={`Signed in as @${me.username} — click to sign out`}
           >
             {me.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element -- Discord CDN, tiny, no optimisation needed
-              <img
-                src={me.avatar_url}
-                alt=""
-                width={16}
-                height={16}
-                style={{ borderRadius: "50%" }}
-              />
+              <img src={me.avatar_url} alt="" width={16} height={16} className="rounded-full" />
             ) : (
               <svg
                 width="14"
@@ -87,7 +94,7 @@ export function Nav() {
                 <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
               </svg>
             )}
-            <span className="btn-label">Sign out</span>
+            <span className={navLabel}>Sign out</span>
           </button>
         ) : null}
       </div>

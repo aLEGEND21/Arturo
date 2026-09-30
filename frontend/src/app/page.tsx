@@ -21,6 +21,16 @@ import { ContextStrip } from "@/components/context-strip";
 import { Blueprint, OverdueTag, Square } from "@/components/industry";
 import { TaskDrawer, revalidateAll } from "@/components/task-drawer";
 import { TodayBoards } from "@/components/today-list";
+import {
+  rowMetaClass,
+  rowSubline,
+  rowTextClass,
+  rowTitle,
+  spanBothLines,
+  taskRowClass,
+  trailingCell,
+} from "@/components/task-row";
+import { cn } from "@/lib/utils";
 
 const TODAY_KEY = "/api/tasks?view=today";
 const ALL_KEY = "/api/tasks?view=all";
@@ -202,73 +212,33 @@ function Dashboard() {
       <ContextStrip />
 
       {error ? (
-        <div
-          style={{
-            margin: "14px var(--page-pad-x) 0",
-            padding: "9px 14px",
-            border: "1px solid var(--color-divider)",
-            fontSize: 13,
-          }}
-        >
+        <div className="mx-page mt-3.5 border border-divider px-3.5 py-[9px] text-[13px]">
           Can&apos;t reach the API — is the backend running on port 8000?
         </div>
       ) : null}
 
-      {/* Two columns; stacks Today above All tasks on small screens (globals.css) */}
-      <div className="dashboard-grid">
+      {/* Two columns; stacks Today above All tasks on phones */}
+      <div className="grid grid-cols-[1fr_1fr] gap-6 px-page py-5 phone:grid-cols-[1fr]">
         {/* — Today column — */}
-        {/* minWidth 0 lets long nowrap notes truncate instead of widening the 1fr track */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 12,
-              position: "relative",
-            }}
-          >
-            <h3 style={{ margin: 0 }}>{heading}</h3>
+        {/* min-w-0 lets long nowrap notes truncate instead of widening the 1fr track */}
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <div className="relative flex items-baseline gap-3">
+            <h3 className="m-0">{heading}</h3>
             {/* Absolutely centered in the column so the arrows stay put no
                 matter how wide the day name or counter is. */}
-            <span
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                transform: "translate(-50%, -50%)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 3,
-              }}
-            >
+            <span className="absolute top-1/2 left-1/2 inline-flex -translate-1/2 items-center gap-[3px]">
               <DayArrow dir={-1} onClick={() => goToOffset(dayOffset - 1)} />
-              <span
-                className="text-muted"
-                style={{ fontSize: 12, width: 76, textAlign: "center" }}
-              >
-                {dateLabel}
-              </span>
+              <span className="w-[76px] text-center text-[12px] text-muted">{dateLabel}</span>
               <DayArrow
                 dir={1}
                 disabled={dayOffset === 0}
                 onClick={() => goToOffset(dayOffset + 1)}
               />
             </span>
-            <span style={{ flex: 1 }} />
-            <span
-              style={{
-                fontFamily: "var(--font-heading)",
-                fontWeight: 600,
-                fontSize: 22,
-                lineHeight: 1.12,
-                color: "var(--color-accent-700)",
-              }}
-            >
+            <span className="flex-1" />
+            <span className="font-heading text-[22px] leading-[1.12] font-semibold text-accent-700">
               {shownDone}
-              <span style={{ color: "var(--color-neutral-500)", fontSize: 16 }}>
-                {" "}
-                / {shownTotal} done
-              </span>
+              <span className="text-[16px] text-neutral-500"> / {shownTotal} done</span>
             </span>
           </div>
 
@@ -287,20 +257,16 @@ function Dashboard() {
             <DayHistoryBoards tasks={history.tasks} />
           ) : (
             <Blueprint>
-              <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
-                Loading…
-              </div>
+              <div className="p-row-x text-[13px] text-muted">Loading…</div>
             </Blueprint>
           )}
         </div>
 
         {/* — All tasks column — */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <h3 style={{ margin: 0 }}>All tasks</h3>
-            <span className="text-muted" style={{ fontSize: 12 }}>
-              {backlog.length} open
-            </span>
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <div className="flex items-baseline gap-3">
+            <h3 className="m-0">All tasks</h3>
+            <span className="text-[12px] text-muted">{backlog.length} open</span>
           </div>
 
           <Blueprint>
@@ -308,135 +274,75 @@ function Dashboard() {
             {backlog.map((t, i) => {
               const tone = deadlineTone(t.deadline);
               const soon = tone !== "normal";
+              const overdue = tone === "overdue";
               return (
                 <div
                   key={t.id}
-                  className="task-row"
                   onClick={() => setSelectedId(t.id)}
-                  style={{
-                    // checkbox, text, effort dot
-                    ["--row-cols" as string]: "auto 1fr auto",
-                    ["--text-col" as string]: "2",
-                    padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-                    borderBottom:
-                      i === backlog.length - 1 && recentDone.length === 0
-                        ? "none"
-                        : "1px solid var(--color-divider)",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                  className={taskRowClass(
+                    "backlog",
+                    cn(
+                      "cursor-pointer hover:bg-neutral-100",
+                      !(i === backlog.length - 1 && recentDone.length === 0) && "border-b border-divider"
+                    )
+                  )}
                 >
                   <Square
                     checked={t.state === "done"}
                     onToggle={() => toggleDone(t)}
                     label={`Mark "${t.title}" done`}
+                    className={spanBothLines}
                   />
-                  <div className="task-row-text" style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 14,
-                        fontWeight: 500,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {t.title}
-                    </div>
+                  <div className={rowTextClass(2)}>
+                    <div className={cn(rowTitle, "font-medium")}>{t.title}</div>
                     {t.notes ? (
-                      <div
-                        className="text-muted"
-                        style={{
-                          fontSize: 11.5,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {t.notes.replace(/\s+/g, " ").trim()}
-                      </div>
+                      <div className={rowSubline}>{t.notes.replace(/\s+/g, " ").trim()}</div>
                     ) : null}
                   </div>
-                  <span className="task-row-meta">
-                    {tone === "overdue" ? <OverdueTag /> : null}
+                  <span className={rowMetaClass(2, overdue)}>
+                    {overdue ? <OverdueTag /> : null}
                     <span
-                      className={t.deadline && !soon ? "text-muted" : !t.deadline ? "text-muted" : undefined}
-                      style={{
-                        fontSize: 12,
-                        whiteSpace: "nowrap",
-                        ...(soon && t.deadline
-                          ? { color: "var(--color-accent-700)", fontWeight: 500 }
-                          : {}),
-                      }}
+                      className={cn(
+                        "text-[12px] whitespace-nowrap",
+                        soon && t.deadline ? "font-medium text-accent-700" : "text-muted"
+                      )}
                     >
                       {fmtDue(t.deadline) ?? "—"}
                     </span>
                   </span>
-                  <EffortDot task={t} />
+                  <EffortDot task={t} className={trailingCell} />
                 </div>
               );
             })}
             {backlog.length === 0 ? (
-              <div
-                className="text-muted"
-                style={{
-                  padding: "var(--row-pad-x)",
-                  fontSize: 13,
-                  borderBottom: recentDone.length > 0 ? "1px solid var(--color-divider)" : "none",
-                }}
-              >
+              <div className={cn("p-row-x text-[13px] text-muted", recentDone.length > 0 && "border-b border-divider")}>
                 No open tasks.
               </div>
             ) : null}
 
             {recentDone.length > 0 ? (
               <>
-                <h6
-                  className="text-muted"
-                  style={{ margin: 0, padding: "22px var(--row-pad-r) 6px var(--row-pad-l)", fontSize: 11 }}
-                >
+                <h6 className="m-0 pt-[22px] pr-row-r pb-1.5 pl-row-l text-[11px] text-muted">
                   Recently completed
                 </h6>
                 {recentDone.map((t, i) => (
                   <div
                     key={t.id}
                     onClick={() => setSelectedId(t.id)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px var(--row-pad-r) 8px var(--row-pad-l)",
-                      borderBottom:
-                        i === recentDone.length - 1
-                          ? "none"
-                          : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
-                      cursor: "pointer",
-                      opacity: 0.75,
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 py-2 pr-row-r pl-row-l opacity-75 hover:bg-neutral-100",
+                      i !== recentDone.length - 1 && "border-b border-divider-soft"
+                    )}
                   >
                     <Square
                       checked
                       onToggle={() => toggleDone(t)}
                       label={`Mark "${t.title}" not done`}
                     />
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontSize: 14,
-                        textDecoration: "line-through",
-                        color: "var(--color-neutral-500)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <span className="min-w-0 flex-1 truncate text-[14px] text-neutral-500 line-through">
                       {t.title}
                     </span>
-                    <span className="text-muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                    <span className="text-[12px] whitespace-nowrap text-muted">
                       Done {fmtDue(t.completed_at)}
                     </span>
                   </div>
@@ -467,14 +373,10 @@ function DayArrow({
       aria-label={dir === -1 ? "Previous day" : "Next day"}
       disabled={disabled}
       onClick={onClick}
-      style={{
-        background: "none",
-        border: "none",
-        padding: 2,
-        display: "grid",
-        cursor: disabled ? "default" : "pointer",
-        color: disabled ? "var(--color-neutral-300)" : "var(--color-neutral-600)",
-      }}
+      className={cn(
+        "grid border-none bg-transparent p-0.5",
+        disabled ? "cursor-default text-neutral-300" : "cursor-pointer text-neutral-600"
+      )}
     >
       <svg
         width="14"

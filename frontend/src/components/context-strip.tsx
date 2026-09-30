@@ -3,7 +3,10 @@
 import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import { ContextNote, api, fetcher, fmtTime } from "@/lib/api";
-import { BellOffIcon } from "./industry";
+import { BellOffIcon, Button } from "./industry";
+
+// Compact ghost buttons that fit inside the banner's text line.
+const pill = "px-2 py-0.5 text-[12px]";
 
 export function ContextStrip() {
   const { data } = useSWR<ContextNote[]>("/api/context-notes", fetcher, {
@@ -21,41 +24,26 @@ export function ContextStrip() {
   }
 
   return (
-    <div style={{ margin: "14px var(--page-pad-x) 0", display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="mx-page mt-3.5 flex flex-col gap-2">
       {globals.map((n) => (
         <div
           key={n.id}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "9px 14px",
-            background: "var(--color-accent-100)",
-            border: "1px solid var(--color-accent-300)",
-          }}
+          className="flex items-center gap-3 border border-accent-300 bg-accent-100 px-3.5 py-[9px]"
         >
           <BellOffIcon />
-          <span style={{ fontSize: 13, color: "var(--color-accent-800)" }}>
+          <span className="text-[13px] text-accent-800">
             <strong>Paused — &ldquo;{n.text}.&rdquo;</strong>
             {n.expires_at
               ? ` Nudges resume at ${fmtTime(n.expires_at)}.`
               : " Paused until you resume."}
           </span>
-          <span style={{ flex: 1 }} />
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 12, padding: "2px 8px" }}
-            onClick={() => resume(n.id)}
-          >
+          <span className="flex-1" />
+          <Button variant="ghost" className={pill} onClick={() => resume(n.id)}>
             Resume now
-          </button>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 12, padding: "2px 8px" }}
-            onClick={() => setHidden((h) => [...h, n.id])}
-          >
+          </Button>
+          <Button variant="ghost" className={pill} onClick={() => setHidden((h) => [...h, n.id])}>
             Dismiss
-          </button>
+          </Button>
         </div>
       ))}
     </div>

@@ -13,7 +13,7 @@ rewrites (see [Future improvements](#future-improvements)).
 
 ```
 backend/   FastAPI + SQLite (sole DB owner) + APScheduler jobs
-frontend/  Next.js 16 (App Router) + Tailwind + shadcn/ui + dnd-kit + SWR
+frontend/  Next.js 16 (App Router) + Tailwind 4 + dnd-kit + SWR
 ```
 
 ## Run it
@@ -92,6 +92,33 @@ docker compose up --build
   list in `app/db.py`; boot applies whatever is missing, snapshotting the
   database first. See [Schema migrations](#schema-migrations).
 - `GET /health` for the uptime monitor and the deploy script's readiness probe.
+
+## Styling
+
+The frontend's design system ("Industry") is a Tailwind 4 theme. Everything
+is styled with utility classes; there are no hand-written component classes.
+
+- **Tokens** live in the `@theme` block of `frontend/src/app/globals.css` and
+  become utilities: colors (`bg-canvas`, `text-ink`, `text-muted`,
+  `border-divider`, `bg-accent-100`, ...), fonts (`font-heading`,
+  `font-body`), `shadow-lg`, the drawer animation, and the page and row
+  insets (`px-page`, `py-row-y`, `pl-row-l`, `pr-row-r`, `p-row-x`). Tailwind's
+  default palette is removed, so only design-system colors exist.
+  Translucent colors are named tokens (`text-muted`, `bg-hover`, ...) rather
+  than opacity modifiers, which Tailwind would mix in a different color
+  space.
+- **Breakpoint:** `phone:` is `max-width: 768px`, and the row and page insets
+  tighten under it. `hover:` is plain `:hover`, not Tailwind 4's
+  hover-capable-devices-only default.
+- **Base layer** (same file): body type, heading scale, links, focus ring.
+- **Shared pieces:** `components/industry.tsx` (Button, Blueprint frame,
+  Tag, OverdueTag, Square checkbox, Seg control, Field, icons),
+  `lib/ui.ts` (class recipes that server components also use: buttons,
+  inputs, kicker), and `components/task-row.ts` (the task-row layout that
+  becomes a two-line grid on phones).
+- `cn()` in `lib/utils.ts` merges classes with tailwind-merge, configured
+  for this theme: font sizes are always exact values like `text-[14px]`,
+  which set no line height, so a size override never drops a `leading-*`.
 
 ## Sign-in
 

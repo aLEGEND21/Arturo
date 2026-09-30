@@ -12,33 +12,27 @@ import {
   removeTaskCache,
   replaceTaskCache,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { CalendarIcon, PlusIcon } from "./industry";
 import { revalidateAll } from "./task-drawer";
 
-/* Bare input styled to read as a task row, not a form control. */
-const bareInput: React.CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  background: "transparent",
-  border: "none",
-  outline: "none",
-  padding: 0,
-  // Not the `font` shorthand: it would pin font-size inline, beating the
-  // .add-input mobile override (16px stops iOS focus zoom).
-  fontFamily: "inherit",
-  // Match the collapsed row's text line so opening the row doesn't change
-  // its height (inputs default to line-height: normal, which is shorter).
-  lineHeight: "inherit",
-  color: "var(--color-text)",
-  caretColor: "var(--color-accent)",
-};
+/* Bare input styled to read as a task row, not a form control. Line height
+   is inherited to match the collapsed row's text line, so opening the row
+   doesn't change its height. 16px on phones stops iOS focus zoom. */
+const bareInput =
+  "min-w-0 flex-1 border-none bg-transparent p-0 text-[14px] leading-[inherit] font-medium text-ink caret-accent outline-none phone:text-[16px]";
+
+/* Row shell shared by the collapsed and open states. */
+const addRow = "flex items-center gap-2.5 border-b border-divider py-row-y pr-row-r pl-row-l";
+const addRowCollapsed = cn(addRow, "cursor-text text-neutral-500 hover:bg-accent-100");
+const addRowOpen = cn(addRow, "bg-accent-100");
 
 /* Placeholder checkbox for the today add-row. Drawn as SVG because iOS
    Safari's dashed-border renderer drops the short left/right edges of an
    18px box entirely. */
 function DashedSquare({ color }: { color: string }) {
   return (
-    <svg width="18" height="18" style={{ flex: "none" }} aria-hidden="true">
+    <svg width="18" height="18" className="flex-none" aria-hidden="true">
       <rect
         x="0.75"
         y="0.75"
@@ -110,45 +104,22 @@ export function TodayAddRow() {
 
   if (!row.open) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-          borderBottom: "1px solid var(--color-divider)",
-          cursor: "text",
-          color: "var(--color-neutral-500)",
-        }}
-        onClick={() => row.setOpen(true)}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-100)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-      >
+      <div className={addRowCollapsed} onClick={() => row.setOpen(true)}>
         <PlusIcon />
         <DashedSquare color="var(--color-divider)" />
-        <span style={{ fontSize: 14 }}>Add a task…</span>
+        <span className="text-[14px]">Add a task…</span>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-        borderBottom: "1px solid var(--color-divider)",
-        background: "var(--color-accent-100)",
-      }}
-    >
+    <div className={addRowOpen}>
       <PlusIcon stroke="var(--color-accent-700)" />
       <DashedSquare color="var(--color-accent-400)" />
       <input
         autoFocus
         placeholder="Task title"
-        className="add-input"
-        style={{ ...bareInput, fontWeight: 500 }}
+        className={bareInput}
         value={row.title}
         onChange={(e) => row.setTitle(e.target.value)}
         onKeyDown={row.onKeyDown}
@@ -198,36 +169,16 @@ export function BacklogAddRow() {
 
   if (!open) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-          borderBottom: "1px solid var(--color-divider)",
-          cursor: "text",
-          color: "var(--color-neutral-500)",
-        }}
-        onClick={() => setOpen(true)}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-100)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-      >
+      <div className={addRowCollapsed} onClick={() => setOpen(true)}>
         <PlusIcon />
-        <span style={{ fontSize: 14 }}>Add a task…</span>
+        <span className="text-[14px]">Add a task…</span>
       </div>
     );
   }
 
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-        borderBottom: "1px solid var(--color-divider)",
-        background: "var(--color-accent-100)",
-      }}
+      className={addRowOpen}
       onBlur={async (e) => {
         // Save-and-close only when focus leaves the whole row, so the
         // calendar chip can be used without committing the task early.
@@ -241,8 +192,7 @@ export function BacklogAddRow() {
       <input
         autoFocus
         placeholder="Task title"
-        className="add-input"
-        style={{ ...bareInput, fontWeight: 500 }}
+        className={bareInput}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
@@ -273,23 +223,12 @@ export function BacklogAddRow() {
             el.focus();
           }
         }}
-        style={{
-          position: "relative",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          fontSize: 12,
-          padding: "2px 8px",
-          // Taller than the 14px text line; the negative margin keeps its
-          // painted size while stopping it from stretching the row open.
-          margin: "-3px 0",
-          border: "1px solid var(--color-accent)",
-          color: due ? "var(--color-bg)" : "var(--color-accent)",
-          background: due ? "var(--color-accent)" : "var(--color-bg)",
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          fontFamily: "inherit",
-        }}
+        // Taller than the 14px text line; the negative margin keeps its
+        // painted size while stopping it from stretching the row open.
+        className={cn(
+          "relative -my-[3px] inline-flex cursor-pointer items-center gap-1 border border-accent px-2 py-0.5 text-[12px] whitespace-nowrap",
+          due ? "bg-accent text-canvas" : "bg-canvas text-accent"
+        )}
       >
         <CalendarIcon />
         {due ? fmtDue(due) : "due"}
@@ -302,7 +241,7 @@ export function BacklogAddRow() {
           // for date inputs, but a direct tap on the transparent overlay
           // opens the native picker. On desktop the click bubbles to the
           // chip button's showPicker() call.
-          style={{ position: "absolute", inset: 0, opacity: 0 }}
+          className="absolute inset-0 opacity-0 phone:text-[16px]"
           tabIndex={-1}
           aria-label="Due date and time"
         />

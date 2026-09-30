@@ -2,18 +2,18 @@
 
 import { toast } from "sonner";
 import { Effort, Task, api, patchTaskCache, revalidateAll } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const EFFORT_COLORS: Record<Effort, string> = {
-  short: "#5c9d70",
-  medium: "#d09c3e",
-  long: "#bf5f50",
+const EFFORT_BG: Record<Effort, string> = {
+  short: "bg-effort-short",
+  medium: "bg-effort-medium",
+  long: "bg-effort-long",
 };
 
 const CYCLE: (Effort | null)[] = [null, "short", "medium", "long"];
 
-export function EffortDot({ task, size = 12 }: { task: Task; size?: number }) {
+export function EffortDot({ task, className }: { task: Task; className?: string }) {
   const effort = task.effort;
-  const color = effort ? EFFORT_COLORS[effort] : "var(--color-neutral-300)";
   const tooltip = effort
     ? `${effort} effort — click to change`
     : "no effort set — click to set";
@@ -36,15 +36,11 @@ export function EffortDot({ task, size = 12 }: { task: Task; size?: number }) {
       title={tooltip}
       aria-label={tooltip}
       onClick={cycle}
-      style={{
-        width: size,
-        height: size,
-        flex: "none",
-        padding: 0,
-        cursor: "pointer",
-        background: color,
-        border: effort ? "1px solid transparent" : "1px solid var(--color-neutral-400)",
-      }}
+      className={cn(
+        "size-3 flex-none cursor-pointer border p-0",
+        effort ? cn(EFFORT_BG[effort], "border-transparent") : "border-neutral-400 bg-neutral-300",
+        className
+      )}
     />
   );
 }

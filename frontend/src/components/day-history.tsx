@@ -1,7 +1,9 @@
 "use client";
 
 import { HistoryTask, fmtTime } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { Blueprint, Square } from "./industry";
+import { rowPadding, rowSubline, rowTitle } from "./task-row";
 
 function statusLabel(t: HistoryTask): { text: string; tone: "muted" | "accent" } {
   switch (t.status) {
@@ -18,53 +20,26 @@ function HistoryRow({ task, isLast }: { task: HistoryTask; isLast: boolean }) {
   const done = task.status === "done";
   const label = statusLabel(task);
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-        borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
-      }}
-    >
+    <div className={cn("flex items-center gap-2.5", rowPadding, !isLast && "border-b border-divider")}>
       <Square checked={done} />
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="min-w-0 flex-1">
         <div
-          style={{
-            fontSize: 14,
-            fontWeight: done ? 400 : 500,
-            textDecoration: done ? "line-through" : undefined,
-            color: done ? "var(--color-neutral-500)" : undefined,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
+          className={cn(
+            rowTitle,
+            done ? "font-normal text-neutral-500 line-through" : "font-medium"
+          )}
         >
           {task.title}
         </div>
         {task.notes ? (
-          <div
-            className="text-muted"
-            style={{
-              fontSize: 11.5,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {task.notes.replace(/\s+/g, " ").trim()}
-          </div>
+          <div className={rowSubline}>{task.notes.replace(/\s+/g, " ").trim()}</div>
         ) : null}
       </div>
       <span
-        className={label.tone === "muted" ? "text-muted" : undefined}
-        style={{
-          fontSize: 12,
-          whiteSpace: "nowrap",
-          ...(label.tone === "accent"
-            ? { color: "var(--color-accent-700)", fontWeight: 500 }
-            : {}),
-        }}
+        className={cn(
+          "text-[12px] whitespace-nowrap",
+          label.tone === "accent" ? "font-medium text-accent-700" : "text-muted"
+        )}
       >
         {label.text}
       </span>
@@ -83,15 +58,15 @@ export function DayHistoryBoards({ tasks }: { tasks: HistoryTask[] }) {
           <HistoryRow key={t.id} task={t} isLast={i === regular.length - 1} />
         ))}
         {regular.length === 0 ? (
-          <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
+          <div className="p-row-x text-[13px] text-muted">
             No task activity on this day.
           </div>
         ) : null}
       </Blueprint>
 
       {recurring.length > 0 ? (
-        <div style={{ marginTop: 12 }}>
-          <h6 className="text-muted" style={{ margin: "0 0 8px" }}>
+        <div className="mt-3">
+          <h6 className="mt-0 mr-0 mb-2 ml-0 text-muted">
             Recurring
           </h6>
           <Blueprint>

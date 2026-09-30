@@ -22,8 +22,18 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { EffortDot } from "./effort-dot";
-import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square } from "./industry";
+import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square, Tag } from "./industry";
+import {
+  rowMetaClass,
+  rowSubline,
+  rowTextClass,
+  rowTitle,
+  spanBothLines,
+  taskRowClass,
+  trailingCell,
+} from "./task-row";
 
 // Done tasks show their completion time in the due slot on the right, so the
 // subline only carries commitment/update context for open ones.
@@ -43,20 +53,13 @@ function subline(task: Task): string {
   return parts.join(" · ");
 }
 
-function DragHandle(props: React.HTMLAttributes<HTMLButtonElement>) {
+function DragHandle({ className, ...props }: React.HTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...props}
       aria-label="Reorder"
       onClick={(e) => e.stopPropagation()}
-      style={{
-        background: "none",
-        border: "none",
-        padding: 0,
-        cursor: "grab",
-        touchAction: "none",
-        display: "grid",
-      }}
+      className={cn("grid cursor-grab touch-none border-none bg-transparent p-0", className)}
     >
       <DragDots />
     </button>
@@ -80,89 +83,61 @@ export function TodayRow({
   const overdue = !done && deadlineTone(task.deadline) === "overdue";
   const soon = deadlineTone(task.deadline) !== "normal";
   const sub = subline(task);
+  const stateChip = !done && !overdue && task.state !== "not_started";
+  const hasChip = (!done && overdue) || stateChip || (!done && !!task.commitment_at);
   return (
     <div
-      className="task-row"
       onClick={() => onOpen(task)}
-      style={{
-        // handle, checkbox, text, effort dot
-        ["--row-cols" as string]: "auto auto 1fr auto",
-        ["--text-col" as string]: "3",
-        padding: "var(--row-pad-y) var(--row-pad-r) var(--row-pad-y) var(--row-pad-l)",
-        borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
-        cursor: "pointer",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+      className={taskRowClass(
+        "today",
+        cn("cursor-pointer hover:bg-neutral-100", !isLast && "border-b border-divider")
+      )}
     >
       {/* Done rows can't be dragged; a spacer keeps the checkbox column aligned. */}
       {dragHandleProps ? (
-        <DragHandle {...dragHandleProps} />
+        <DragHandle {...dragHandleProps} className={spanBothLines} />
       ) : done ? (
-        <span aria-hidden="true" style={{ width: 14, flex: "none" }} />
+        <span aria-hidden="true" className={cn("w-3.5 flex-none", spanBothLines)} />
       ) : (
-        <DragDots />
+        <DragDots className={spanBothLines} />
       )}
-      <Square checked={done} onToggle={() => onToggleDone(task)} />
-      <div className="task-row-text" style={{ flex: 1, minWidth: 0 }}>
+      <Square checked={done} onToggle={() => onToggleDone(task)} className={spanBothLines} />
+      <div className={rowTextClass(3)}>
         <div
-          style={{
-            fontSize: 14,
-            fontWeight: done ? 400 : 500,
-            textDecoration: done ? "line-through" : undefined,
-            color: done ? "var(--color-neutral-500)" : undefined,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
+          className={cn(
+            rowTitle,
+            done ? "font-normal text-neutral-500 line-through" : "font-medium"
+          )}
         >
           {task.title}
         </div>
-        {sub ? (
-          <div
-            className="text-muted"
-            style={{
-              fontSize: 11.5,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {sub}
-          </div>
-        ) : null}
+        {sub ? <div className={rowSubline}>{sub}</div> : null}
       </div>
-      <span className="task-row-meta">
+      <span className={rowMetaClass(3, hasChip)}>
         {!done && overdue ? <OverdueTag /> : null}
-        {!done && !overdue && task.state !== "not_started" ? (
-          <span className="tag tag-accent">{task.state.replace("_", " ")}</span>
-        ) : null}
+        {stateChip ? <Tag tone="accent">{task.state.replace("_", " ")}</Tag> : null}
         {!done && task.commitment_at ? (
-          <span className="tag tag-neutral" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <Tag tone="neutral" className="gap-1">
             <ClockIcon />
             {fmtTime(task.commitment_at)}
-          </span>
+          </Tag>
         ) : null}
         {done ? (
-          <span className="text-muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+          <span className="text-[12px] whitespace-nowrap text-muted">
             {task.completed_at ? `Done ${fmtTime(task.completed_at)}` : "Done"}
           </span>
         ) : (
           <span
-            className={task.deadline && soon ? undefined : "text-muted"}
-            style={{
-              fontSize: 12,
-              whiteSpace: "nowrap",
-              ...(soon && task.deadline
-                ? { color: "var(--color-accent-700)", fontWeight: 500 }
-                : {}),
-            }}
+            className={cn(
+              "text-[12px] whitespace-nowrap",
+              task.deadline && soon ? "font-medium text-accent-700" : "text-muted"
+            )}
           >
             {fmtDue(task.deadline) ?? "—"}
           </span>
         )}
       </span>
-      <EffortDot task={task} />
+      <EffortDot task={task} className={trailingCell} />
     </div>
   );
 }
@@ -184,53 +159,23 @@ function RecurringRow({
   return (
     <div
       onClick={() => onOpen(task)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "calc(var(--row-pad-y) - 1px) var(--row-pad-r) calc(var(--row-pad-y) - 1px) var(--row-pad-l)",
-        cursor: "pointer",
-        borderBottom: isLast ? "none" : "1px solid var(--color-divider)",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-neutral-100)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+      className={cn(
+        "flex cursor-pointer items-center gap-2.5 py-[calc(var(--spacing-row-y)_-_1px)] pr-row-r pl-row-l hover:bg-neutral-100",
+        !isLast && "border-b border-divider"
+      )}
     >
       {dragHandleProps ? <DragHandle {...dragHandleProps} /> : <DragDots />}
       <Square checked={done} onToggle={() => onToggleDone(task)} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 14,
-            textDecoration: done ? "line-through" : undefined,
-            color: done ? "var(--color-neutral-500)" : undefined,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {task.title}
-        </div>
+      <div className="min-w-0 flex-1">
+        <div className={cn(rowTitle, done && "text-neutral-500 line-through")}>{task.title}</div>
         {task.notes ? (
-          <div
-            className="text-muted"
-            style={{
-              fontSize: 11.5,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {task.notes.replace(/\s+/g, " ").trim()}
-          </div>
+          <div className={rowSubline}>{task.notes.replace(/\s+/g, " ").trim()}</div>
         ) : null}
       </div>
-      <span
-        className={done ? "tag tag-accent" : "tag tag-neutral"}
-        style={{ display: "inline-flex", gap: 4, alignItems: "center" }}
-      >
+      <Tag tone={done ? "accent" : "neutral"} className="gap-1">
         <FlameIcon />
         {task.streak + (done ? 1 : 0)}-day streak
-      </span>
+      </Tag>
       <EffortDot task={task} />
     </div>
   );
@@ -258,14 +203,9 @@ function SortableItem({
   return (
     <div
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.35 : undefined,
-        zIndex: isDragging ? 10 : undefined,
-        position: "relative",
-        background: "var(--color-bg)",
-      }}
+      className={cn("relative bg-canvas", isDragging && "z-10 opacity-35")}
+      // dnd-kit drives the live drag position.
+      style={{ transform: CSS.Transform.toString(transform), transition }}
     >
       <Row
         task={task}
@@ -281,10 +221,7 @@ function SortableItem({
 function DropZone({ id, children }: { id: string; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div
-      ref={setNodeRef}
-      style={{ background: isOver ? "var(--color-accent-100)" : undefined }}
-    >
+    <div ref={setNodeRef} className={cn(isOver && "bg-accent-100")}>
       {children}
     </div>
   );
@@ -369,7 +306,7 @@ export function TodayBoards({
       onDragCancel={() => setActiveTask(null)}
     >
       <Blueprint>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="flex flex-col">
           {addRow}
           <SortableContext items={regular.map((t) => t.id)} strategy={verticalListSortingStrategy}>
             <DropZone id="regular-zone">
@@ -384,7 +321,7 @@ export function TodayBoards({
                 />
               ))}
               {regular.length === 0 ? (
-                <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
+                <div className="p-row-x text-[13px] text-muted">
                   Nothing on today&apos;s list yet.
                 </div>
               ) : null}
@@ -393,8 +330,8 @@ export function TodayBoards({
         </div>
       </Blueprint>
 
-      <div style={{ marginTop: 12 }}>
-        <h6 className="text-muted" style={{ margin: "0 0 8px" }}>
+      <div className="mt-3">
+        <h6 className="mt-0 mr-0 mb-2 ml-0 text-muted">
           Recurring — not counted above
         </h6>
         <Blueprint>
@@ -411,7 +348,7 @@ export function TodayBoards({
                 />
               ))}
               {recurring.length === 0 ? (
-                <div className="text-muted" style={{ padding: "var(--row-pad-x)", fontSize: 13 }}>
+                <div className="p-row-x text-[13px] text-muted">
                   Drag a task here to make it recurring.
                 </div>
               ) : null}
@@ -422,13 +359,7 @@ export function TodayBoards({
 
       <DragOverlay>
         {activeTask ? (
-          <div
-            style={{
-              background: "var(--color-bg)",
-              border: "1px solid var(--color-divider)",
-              boxShadow: "var(--shadow-lg)",
-            }}
-          >
+          <div className="border border-divider bg-canvas shadow-lg">
             {activeTask.recurring ? (
               <RecurringRow task={activeTask} onToggleDone={() => {}} onOpen={() => {}} isLast />
             ) : (

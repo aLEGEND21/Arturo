@@ -1,17 +1,34 @@
 @import "tailwindcss";
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Industry — design-system tokens and component classes, ported from the
-   Claude Design project (3a "Dashboard v3"). Fonts are loaded via next/font
-   in layout.tsx and exposed as --font-barlow / --font-barlow-condensed.
+   Industry design system (Claude Design project 3a, "Dashboard v3"), as a
+   Tailwind theme. Tokens below become utilities: `bg-canvas`, `text-muted`,
+   `border-divider`, `py-row-y`, `font-heading`, `shadow-lg`, ... Components
+   compose those utilities in markup; shared pieces (Button, Blueprint, Seg,
+   tags, fields) live in components/industry.tsx. Fonts are loaded via
+   next/font in layout.tsx and exposed as --font-barlow(-condensed).
    ══════════════════════════════════════════════════════════════════════ */
 
-:root {
-  --color-bg: #f2f2f3;
+/* The small-screen breakpoint. Deliberately `max-width: 768px` (768 itself
+   included), not Tailwind's `max-md` (which stops at 767.98px). */
+@custom-variant phone (@media (max-width: 768px));
+
+/* Plain :hover, as the design system has always used. Tailwind 4's default
+   wraps hover in `@media (hover: hover)`, which would change behavior on
+   touch devices. */
+@custom-variant hover (&:hover);
+
+/* `static` emits every token as a CSS variable even when no utility uses it,
+   so SVG attributes and dnd-kit inline styles can still reference them. */
+@theme static {
+  /* Only the design system's colors: Tailwind's default palette is removed
+     so an off-system `bg-blue-500` simply doesn't exist. */
+  --color-*: initial;
+
+  --color-canvas: #f2f2f3;
   --color-surface: #e9e9ea;
-  --color-text: #1d1f20;
+  --color-ink: #1d1f20;
   --color-accent: #5980a6;
-  --color-accent-2: #728fab;
   --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
 
   --color-neutral-100: #f5f5f8;
@@ -34,319 +51,84 @@
   --color-accent-800: #2c455d;
   --color-accent-900: #1d2d3d;
 
+  /* Translucent ink and accent. Named tokens rather than opacity modifiers
+     (`text-ink/55`): Tailwind mixes those in oklab, these stay in srgb. */
+  --color-muted: color-mix(in srgb, var(--color-ink) 55%, transparent);
+  --color-faint: color-mix(in srgb, var(--color-ink) 50%, transparent);
+  --color-label: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  --color-divider-soft: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  --color-divider-strong: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  --color-grid: color-mix(in srgb, var(--color-ink) 5%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-ink) 7%, transparent);
+  --color-press: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  --color-accent-hover: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  --color-accent-press: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --color-selection: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --color-scrim: color-mix(in srgb, var(--color-neutral-900) 22%, transparent);
+
+  --color-danger: #8f261c;
+  --color-danger-bg: #f8dcd8;
+  --color-effort-short: #5c9d70;
+  --color-effort-medium: #d09c3e;
+  --color-effort-long: #bf5f50;
+
   --font-heading: var(--font-barlow-condensed), "Barlow Condensed", system-ui, sans-serif;
-  --font-heading-weight: 600;
   --font-body: var(--font-barlow), "Barlow", system-ui, sans-serif;
 
-  --space-1: 3.4px;
-  --space-2: 6.8px;
-  --space-3: 10.2px;
-  --space-4: 13.6px;
-  --space-6: 20.4px;
-  --space-8: 27.2px;
-
-  /* Page gutter and task-row padding; both tighten on small screens so
-     more of each row is content. */
-  --page-pad-x: 20px;
-  --row-pad-y: 11px;
-  --row-pad-x: 14px;
-  /* Rows lead with narrow controls (handle, checkbox) and end with the
-     effort dot, so on small screens the left inset shrinks more than the
-     right. Empty-state messages keep the symmetric --row-pad-x. */
-  --row-pad-l: var(--row-pad-x);
-  --row-pad-r: var(--row-pad-x);
-
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 7px;
-
-  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
-  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
 
-  /* sonner toast surfaces */
-  --normal-bg: #ffffff;
-  --normal-text: var(--color-text);
-  --normal-border: var(--color-divider);
-}
+  /* Page gutter and task-row padding (`px-page`, `py-row-y`, `pl-row-l`,
+     ...). Both tighten on phones, see the base layer, so more of each row is
+     content. Rows lead with narrow controls (handle, checkbox) and end with
+     the effort dot, so on phones the left inset shrinks more than the right;
+     empty-state messages keep the symmetric `p-row-x`. */
+  --spacing-page: 20px;
+  --spacing-row-y: 11px;
+  --spacing-row-x: 14px;
+  --spacing-row-l: 14px;
+  --spacing-row-r: 14px;
 
-*, *::before, *::after { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.55;
-  font-weight: 400;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-  font-weight: var(--font-heading-weight);
-  line-height: 1.12;
-  letter-spacing: -0.015em;
-  margin: 0 0 var(--space-2);
-}
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
-p { margin: 0 0 var(--space-3); }
-a { color: var(--color-accent); text-underline-offset: 3px; }
-a:hover { color: var(--color-accent-700); }
-img { display: block; max-width: 100%; }
-
-.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
-:focus { outline: none; }
-:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
-
-/* — blueprint frame — */
-.blueprint {
-  position: relative;
-  border: 1px solid var(--color-divider);
-  border-radius: 0;
-}
-.blueprint > .corner {
-  position: absolute; width: 11px; height: 11px;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
-  pointer-events: none;
-}
-.blueprint > .corner::before, .blueprint > .corner::after {
-  content: ""; position: absolute; background: currentColor;
-}
-.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
-.blueprint > .corner::after  { top: 5px; left: 0; width: 100%; height: 1px; }
-.blueprint > .corner.tl { top: -6px; left: -6px; }
-.blueprint > .corner.tr { top: -6px; right: -6px; }
-.blueprint > .corner.bl { bottom: -6px; left: -6px; }
-.blueprint > .corner.br { bottom: -6px; right: -6px; }
-
-/* — buttons — */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  cursor: pointer; text-decoration: none;
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 14px; line-height: 1.2; color: var(--color-text);
-  background: transparent; border: 1px solid var(--color-divider);
-  padding: var(--space-2) calc(var(--space-3) * 1.2);
-  border-radius: 0;
-}
-.btn svg { display: block; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
-/* Two shades down: -600 is within a hair of the base accent and reads as no
-   hover, while anything past -700 is too heavy. The text color is restated
-   because a link-flavoured .btn would otherwise pick up the global a:hover
-   color and vanish into the background. */
-.btn-primary:hover {
-  background: var(--color-accent-700);
-  border-color: var(--color-accent-700);
-  color: var(--color-bg);
-}
-.btn-primary:active {
-  background: var(--color-accent-800);
-  border-color: var(--color-accent-800);
-  color: var(--color-bg);
-}
-.btn-secondary { border-color: var(--color-divider); }
-.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
-.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
-.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); border-color: transparent; }
-.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
-.btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
-.btn-icon { width: 36px; height: 36px; padding: 0; }
-
-/* — forms — */
-.field > label {
-  display: block; font-size: 12px; margin-bottom: 5px;
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
-}
-.input {
-  width: 100%; min-height: 36px; padding: 6px 10px; font: inherit;
-  font-size: 14px; color: var(--color-text); caret-color: var(--color-accent);
-  background: var(--color-surface);
-  border: 1px solid var(--color-divider); border-radius: 0;
-}
-.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
-.input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
-textarea.input { min-height: 90px; resize: vertical; }
-
-.radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
-.radio input, .seg-opt input {
-  position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;
-}
-.radio .dot {
-  width: 16px; height: 16px; flex: none; border-radius: 0;
-  border: 1.5px solid var(--color-divider);
-}
-.radio:hover .dot { border-color: var(--color-accent); }
-.radio input:checked + .dot {
-  border-color: var(--color-accent); background: var(--color-accent);
-  box-shadow: inset 0 0 0 4px var(--color-bg);
-}
-.radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-
-.seg {
-  display: inline-flex; overflow: hidden;
-  border: 1px solid var(--color-divider); border-radius: 0;
-}
-.seg-opt {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 12px; font-size: 13px; cursor: pointer;
-}
-.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
-.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
-.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
-.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-
-/* — cards — */
-.card-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent); }
-
-/* — tags — */
-.tag {
-  display: inline-flex; align-items: center; font-size: 11px;
-  letter-spacing: 0.02em; padding: 3px 10px;
-  border-radius: 0; white-space: nowrap;
-}
-.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
-.tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
-.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
-
-/* — task rows — */
-/* Chips and the due date sit to the right of the title on wide screens and
-   drop below it on small ones. On small screens the row is a two-line grid:
-   the title block and the meta cluster stack in the text column while the
-   leading controls and the effort dot span both lines, so they stay centered
-   against the whole row. Each row sets --row-cols (its column template) and
-   --text-col (the column its title block lives in). */
-.task-row { display: flex; align-items: center; gap: 10px; }
-.task-row-meta { display: inline-flex; align-items: center; gap: 10px; }
-@media (max-width: 768px) {
-  .task-row {
-    display: grid; grid-template-columns: var(--row-cols);
-    column-gap: 8px; row-gap: 0;
+  --animate-drawer-in: drawer-in 0.2s ease-out;
+  @keyframes drawer-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
   }
-  .task-row > * { grid-row: 1 / span 2; }
-  .task-row-text { grid-row: 1; grid-column: var(--text-col); }
-  .task-row-meta { grid-row: 2; grid-column: var(--text-col); }
-  /* No row gap: a plain due date then sits as close to the line above as
-     the description sits to the title. A line with a chip gets a little
-     gap back so the chip's box doesn't crowd the text above it. */
-  .task-row-meta:has(> .tag) { margin-top: 3px; }
-  /* Tighter leading pulls title, description, and due date closer. */
-  .task-row-text > *, .task-row-meta { line-height: 1.35; }
-  .task-row > :last-child { grid-column: -2; }
 }
 
-/* — dashboard layout — */
-.dashboard-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 24px; padding: 20px var(--page-pad-x);
-}
-/* Inline add-a-task inputs (font size lives here, not inline, so the
-   mobile override below can reach it). */
-.add-input { font-size: 14px; }
-@media (max-width: 768px) {
+@layer base {
   :root {
-    --page-pad-x: 12px; --row-pad-y: 6px; --row-pad-x: 10px;
-    --row-pad-l: 6px; --row-pad-r: 12px;
+    /* sonner toast surfaces */
+    --normal-bg: #ffffff;
+    --normal-text: var(--color-ink);
+    --normal-border: var(--color-divider);
   }
-  .dashboard-grid { grid-template-columns: 1fr; }
-  /* iOS Safari auto-zooms into focused controls under 16px. */
-  .input, .add-input, input[type="datetime-local"] { font-size: 16px; }
-}
+  @variant phone {
+    :root {
+      --spacing-page: 12px;
+      --spacing-row-y: 6px;
+      --spacing-row-x: 10px;
+      --spacing-row-l: 6px;
+      --spacing-row-r: 12px;
+    }
+  }
 
-/* — login page — */
-/* Full-height stage with a faint drafting grid, so the one blueprint frame
-   on it reads as intentional rather than as a lonely card. The nav is not
-   rendered on this route, so the stage owns the whole viewport. Fixed to
-   the viewport rather than sized in flow: the layout's <main> caps content
-   at 1280px, which would cut the grid off with hard edges on wide screens.
-   (100vw would include the scrollbar and cause sideways scroll on Windows.) */
-.login {
-  position: fixed; inset: 0; overflow-y: auto;
-  display: grid; place-items: center;
-  padding: var(--space-8) var(--page-pad-x);
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--color-text) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-text) 5%, transparent) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: center;
-}
-.login-card { width: 100%; max-width: 380px; }
-.login-head {
-  display: flex; align-items: center; gap: 14px;
-  padding: 22px 24px 18px;
-  border-bottom: 1px solid var(--color-divider);
-}
-.login-mark { flex: none; width: 44px; height: 44px; }
-.login-brand {
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 22px; line-height: 1; letter-spacing: 0.08em;
-  margin-bottom: 4px;
-}
-.login-body { display: grid; gap: 16px; padding: 22px 24px; }
-.login-lede { margin: 0; font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-.login-btn { width: 100%; padding-block: 11px; font-size: 15px; gap: 9px; }
-.login-alert {
-  display: flex; align-items: flex-start; gap: 9px;
-  padding: 10px 12px; font-size: 13px; line-height: 1.4;
-  background: #f8dcd8; color: #8f261c;
-  border-left: 3px solid #8f261c;
-}
-.login-alert svg { flex: none; margin-top: 2px; }
-.login-foot {
-  padding: 11px 24px;
-  border-top: 1px solid var(--color-divider);
-  font-size: 12px; line-height: 1.4; text-align: center;
-  color: color-mix(in srgb, var(--color-text) 50%, transparent);
-}
+  body {
+    @apply m-0 bg-canvas font-body text-[15px] leading-[1.55] font-normal text-ink;
+  }
 
-/* — navigation — */
-.nav {
-  display: flex; align-items: center; gap: var(--space-4);
-  /* Horizontal padding matches the dashboard grid gutter so the brand and
-     buttons line up with the column edges below. */
-  padding: var(--space-4) var(--page-pad-x);
-}
-.nav-brand {
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  font-size: 18px; margin-right: auto; letter-spacing: 0.06em;
-  color: var(--color-text); text-decoration: none;
-}
-/* Plain nav links only — a .btn in the nav keeps its own button styling,
-   which the accent hover colour here would otherwise override. */
-.nav a:not(.btn) { color: inherit; text-decoration: none; font-size: 14px; }
-.nav a:not(.btn):hover, .nav a:not(.btn)[aria-current='page'] { color: var(--color-accent); }
-/* Tighter than a standalone .btn: the nav is a compact strip, so the
-   Export button sits closer to its label than a dialog button would. */
-.nav .btn { padding: calc(var(--space-1) * 1.5) var(--space-3); }
-/* Brand, Export, and Sign out share one line, and on a phone the labels
-   are what has to give: each button collapses to its icon and keeps its accessible
-   name from aria-label. */
-@media (max-width: 768px) {
-  .nav .btn-label { display: none; }
-  .nav .btn { padding-inline: var(--space-2); }
-}
+  h1, h2, h3, h4, h5, h6 {
+    @apply mt-0 mr-0 mb-[6.8px] ml-0 font-heading leading-[1.12] font-semibold tracking-[-0.015em];
+  }
+  h1 { @apply text-[42px]; }
+  h2 { @apply text-[32px]; }
+  h3 { @apply text-[25px]; }
+  h4 { @apply text-[20px]; }
+  h5 { @apply text-[16px]; }
+  h6 { @apply text-[13px] tracking-[0.08em] uppercase; }
+  p { @apply mt-0 mr-0 mb-[10.2px] ml-0; }
+  a { @apply text-accent underline-offset-3 hover:text-accent-700; }
 
-/* — tables — */
-.table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.table th {
-  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
-  padding: var(--space-2); border-bottom: 1px solid var(--color-divider);
+  :focus { outline: none; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
+  ::selection { @apply bg-selection; }
 }
-.table td {
-  padding: var(--space-2);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
-}
-.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
-
-/* — motion (from the 3a mockup) — */
-@keyframes add-expand { from { max-height: 52px; opacity: 0.6; } to { max-height: 400px; opacity: 1; } }
-@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
