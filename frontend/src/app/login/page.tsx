@@ -9,7 +9,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // Reasons the backend can bounce back with (?error=...), see auth.py.
 const ERRORS: Record<string, string> = {
-  not_allowed: "That Discord account isn't on the allowlist for this dashboard.",
   cancelled: "Discord sign-in was cancelled.",
   state: "Sign-in expired or was tampered with. Try again.",
   discord: "Discord didn't complete the sign-in. Try again.",
@@ -84,7 +83,7 @@ export default async function LoginPage({
           </div>
 
           <div className="border-t border-divider px-6 py-[11px] text-center text-[12px] leading-[1.4] text-faint">
-            Access is limited to approved Discord accounts.
+            Your tasks are private to your account.
           </div>
         </Blueprint>
       </div>

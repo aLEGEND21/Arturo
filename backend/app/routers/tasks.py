@@ -6,10 +6,16 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..db import db_dep, log_event, now_iso
+from ..auth import CurrentUser
+from ..db import MAX_TASKS, app_timezone, db_dep, log_event, now_iso, require_room, write_lock
 from ..schemas import ReorderRequest, TaskCreate, TaskUpdate
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+# Every query here is scoped to the signed-in user. A task that exists but
+# belongs to someone else is reported exactly like one that doesn't exist
+# (404), so ids can't be probed. Positions are per user: each user's lists
+# are ordered among their own tasks only.
 
 
 # backlog_origin: the task was created on the all-tasks list rather than on
@@ -31,20 +37,36 @@ def row_to_task(row: sqlite3.Row) -> dict:
     return t
 
 
-def fetch_task(conn: sqlite3.Connection, task_id: int) -> dict:
-    row = conn.execute(f"{TASK_SELECT} WHERE t.id = ?", (task_id,)).fetchone()
+def fetch_task(conn: sqlite3.Connection, task_id: int, user_id: int) -> dict:
+    """The caller's task, or 404. The one way handlers load a task by id."""
+    row = conn.execute(f"{TASK_SELECT} WHERE t.id = ? AND t.user_id = ?", (task_id, user_id)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return row_to_task(row)
 
 
+def check_board(conn: sqlite3.Connection, board_id: Optional[int], user_id: int) -> None:
+    """A board id on a task must be one of the caller's boards."""
+    if board_id is None:
+        return
+    if conn.execute("SELECT 1 FROM boards WHERE id = ? AND user_id = ?", (board_id, user_id)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="Board not found")
+
+
+def next_position(conn: sqlite3.Connection, user_id: int) -> int:
+    return conn.execute(
+        "SELECT COALESCE(MAX(position), 0) FROM tasks WHERE user_id = ?", (user_id,)
+    ).fetchone()[0] + 1
+
+
 @router.get("")
 def list_tasks(
+    user: CurrentUser,
     view: Literal["today", "backlog", "all"] = "all",
     board_id: Optional[int] = None,
     conn: sqlite3.Connection = Depends(db_dep),
 ):
-    where, params = [], []
+    where, params = ["t.user_id = ?"], [user["id"]]
     if view == "today":
         where.append("today_flag = 1 AND state != 'dropped'")
     elif view == "backlog":
@@ -52,14 +74,11 @@ def list_tasks(
     if board_id is not None:
         where.append("board_id = ?")
         params.append(board_id)
-    sql = TASK_SELECT
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY t.position ASC, t.id ASC"
+    sql = TASK_SELECT + " WHERE " + " AND ".join(where) + " ORDER BY t.position ASC, t.id ASC"
     return [row_to_task(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def today_insert_position(conn: sqlite3.Connection, deadline: Optional[str]) -> int:
+def today_insert_position(conn: sqlite3.Connection, user_id: int, deadline: Optional[str]) -> int:
     """Position for a task joining the today list (created there or promoted
     by hand): the top, except that
     open tasks due sooner keep their place above it. Deadlines are naive
@@ -70,37 +89,45 @@ def today_insert_position(conn: sqlite3.Connection, deadline: Optional[str]) -> 
     sooner or the list is empty."""
     rows = conn.execute(
         """SELECT position, deadline FROM tasks
-           WHERE today_flag = 1 AND recurring = 0 AND state NOT IN ('done','dropped')
-           ORDER BY position ASC, id ASC"""
+           WHERE user_id = ? AND today_flag = 1 AND recurring = 0 AND state NOT IN ('done','dropped')
+           ORDER BY position ASC, id ASC""",
+        (user_id,),
     ).fetchall()
     for r in rows:
         sooner = r["deadline"] is not None and (deadline is None or r["deadline"] < deadline)
         if not sooner:
-            conn.execute("UPDATE tasks SET position = position + 1 WHERE position >= ?", (r["position"],))
+            conn.execute(
+                "UPDATE tasks SET position = position + 1 WHERE user_id = ? AND position >= ?",
+                (user_id, r["position"]),
+            )
             return r["position"]
-    return conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0] + 1
+    return next_position(conn, user_id)
 
 
 @router.post("", status_code=201)
-def create_task(body: TaskCreate, conn: sqlite3.Connection = Depends(db_dep)):
+def create_task(body: TaskCreate, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    uid = user["id"]
+    write_lock(conn)
+    require_room(conn, "SELECT COUNT(*) FROM tasks WHERE user_id = ?", (uid,), MAX_TASKS, "tasks")
+    check_board(conn, body.board_id, uid)
     today_flag = 1 if (body.today or body.recurring) else 0
     deadline = body.deadline
     if body.today and not body.recurring and deadline is None:
         # A task added straight to the today list is due by the end of the
         # calendar day it was created on. Naive local time, matching what the
         # dashboard's datetime picker saves.
-        tz = ZoneInfo(conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0])
+        tz = ZoneInfo(app_timezone(conn))
         deadline = datetime.now(tz).strftime("%Y-%m-%dT23:59")
     if body.today and not body.recurring:
-        position = today_insert_position(conn, deadline)
+        position = today_insert_position(conn, uid, deadline)
     else:
-        position = conn.execute("SELECT COALESCE(MAX(position), 0) FROM tasks").fetchone()[0] + 1
+        position = next_position(conn, uid)
     cur = conn.execute(
-        """INSERT INTO tasks (title, notes, handling, position, starred, recurring, board_id,
+        """INSERT INTO tasks (user_id, title, notes, handling, position, starred, recurring, board_id,
                               deadline, commitment_at, effort, state, today_flag, source, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            body.title, body.notes, body.handling, position, int(body.starred),
+            uid, body.title, body.notes, body.handling, position, int(body.starred),
             int(body.recurring), body.board_id, deadline, body.commitment_at,
             body.effort, body.state, today_flag, body.source, now_iso(),
         ),
@@ -110,17 +137,17 @@ def create_task(body: TaskCreate, conn: sqlite3.Connection = Depends(db_dep)):
     if today_flag:
         log_event(conn, task_id, "promoted", {"reason": "created_for_today"})
     conn.commit()
-    return fetch_task(conn, task_id)
+    return fetch_task(conn, task_id, uid)
 
 
 @router.get("/{task_id}")
-def get_task(task_id: int, conn: sqlite3.Connection = Depends(db_dep)):
-    return fetch_task(conn, task_id)
+def get_task(task_id: int, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    return fetch_task(conn, task_id, user["id"])
 
 
 @router.get("/{task_id}/events")
-def task_events(task_id: int, conn: sqlite3.Connection = Depends(db_dep)):
-    fetch_task(conn, task_id)
+def task_events(task_id: int, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    fetch_task(conn, task_id, user["id"])
     rows = conn.execute(
         "SELECT * FROM task_events WHERE task_id = ? ORDER BY id DESC LIMIT 100", (task_id,)
     ).fetchall()
@@ -133,11 +160,15 @@ def task_events(task_id: int, conn: sqlite3.Connection = Depends(db_dep)):
 
 
 @router.patch("/{task_id}")
-def update_task(task_id: int, body: TaskUpdate, conn: sqlite3.Connection = Depends(db_dep)):
-    task = fetch_task(conn, task_id)
+def update_task(task_id: int, body: TaskUpdate, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    uid = user["id"]
+    write_lock(conn)
+    task = fetch_task(conn, task_id, uid)
     fields = body.model_dump(exclude_unset=True)
     if not fields:
         return task
+    if "board_id" in fields:
+        check_board(conn, fields["board_id"], uid)
 
     sets, params = [], []
 
@@ -167,7 +198,7 @@ def update_task(task_id: int, body: TaskUpdate, conn: sqlite3.Connection = Depen
             # top, below any open today task due sooner. Uses the deadline
             # this same PATCH may be setting.
             sets.append("position = ?")
-            params.append(today_insert_position(conn, fields.get("deadline", task["deadline"])))
+            params.append(today_insert_position(conn, uid, fields.get("deadline", task["deadline"])))
         log_event(
             conn, task_id,
             "promoted" if today_flag else "deferred",
@@ -185,25 +216,29 @@ def update_task(task_id: int, body: TaskUpdate, conn: sqlite3.Connection = Depen
         params.append(int(value) if isinstance(value, bool) else value)
 
     if sets:
-        params.append(task_id)
-        conn.execute(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params)
+        params += [task_id, uid]
+        conn.execute(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ? AND user_id = ?", params)
     conn.commit()
-    return fetch_task(conn, task_id)
+    return fetch_task(conn, task_id, uid)
 
 
 @router.post("/reorder")
-def reorder_tasks(body: ReorderRequest, conn: sqlite3.Connection = Depends(db_dep)):
+def reorder_tasks(body: ReorderRequest, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    uid = user["id"]
     if not body.ids:
         return {"ok": True, "count": 0}
+    write_lock(conn)
     placeholders = ",".join("?" * len(body.ids))
     rows = conn.execute(
-        f"SELECT id, position FROM tasks WHERE id IN ({placeholders})", body.ids
+        f"SELECT id, position FROM tasks WHERE user_id = ? AND id IN ({placeholders})", [uid, *body.ids]
     ).fetchall()
+    # Another user's id counts as unknown, so nothing is moved and nothing
+    # about it is revealed. Duplicates also fail this check.
     if len(rows) != len(body.ids):
         raise HTTPException(status_code=400, detail="Unknown task id in reorder")
     # Reuse the same position slots so tasks outside this view keep their order.
     slots = sorted(r["position"] for r in rows)
     for slot, task_id in zip(slots, body.ids):
-        conn.execute("UPDATE tasks SET position = ? WHERE id = ?", (slot, task_id))
+        conn.execute("UPDATE tasks SET position = ? WHERE id = ? AND user_id = ?", (slot, task_id, uid))
     conn.commit()
     return {"ok": True, "count": len(body.ids)}

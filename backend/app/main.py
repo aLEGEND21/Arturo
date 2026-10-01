@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
-from .auth import require_user
+from .auth import require_admin, require_user
 from .clock import DAY_START_HOUR
 from .db import init_db
 from .jobs.maintenance import run_backup, run_rollover, run_sweep
@@ -60,16 +60,17 @@ def health():
     return {"ok": True}
 
 
-@app.post("/api/jobs/rollover", dependencies=[Depends(require_user)])
+# Manual job triggers act on every user's data, so they are admin-only.
+@app.post("/api/jobs/rollover", dependencies=[Depends(require_admin)])
 def trigger_rollover():
     return run_rollover()
 
 
-@app.post("/api/jobs/sweep", dependencies=[Depends(require_user)])
+@app.post("/api/jobs/sweep", dependencies=[Depends(require_admin)])
 def trigger_sweep():
     return run_sweep()
 
 
-@app.post("/api/jobs/backup", dependencies=[Depends(require_user)])
+@app.post("/api/jobs/backup", dependencies=[Depends(require_admin)])
 def trigger_backup():
     return run_backup()

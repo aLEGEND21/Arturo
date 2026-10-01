@@ -3,30 +3,33 @@
 The flow: GET /api/auth/login sends the browser to Discord with a random
 `state` pinned in a short-lived cookie. Discord returns to
 GET /api/auth/callback, which swaps the code for a token, reads the profile
-(`identify` scope only), checks the Discord id against the allowlist, upserts
-the `users` row, and opens a session. The session token lives in an HttpOnly
+(`identify` scope only), upserts the `users` row, and opens a session. The session token lives in an HttpOnly
 cookie; only its SHA-256 lands in the database.
 
 Every API router hangs `require_user` off its include_router call, so a
 request without a live session gets a 401 before any handler runs. Only
-/health and these auth routes stay open.
+/health and these auth routes stay open. Handlers that touch data take the
+same dependency (`CurrentUser`) and scope every query by `user["id"]`;
+FastAPI resolves it once per request, so the session is looked up once.
 
-Multi-user note: nothing here assumes one user. Widening access later means
-replacing ALLOWED_DISCORD_IDS with an invite flow, then scoping data by
-`user["id"]` in the routers."""
+Any Discord account may sign in. Each person who signs in gets their own
+users row, created on first login, and sees only their own data. The one
+admin, the owner (OWNER_DISCORD_ID in db.py), can also trigger the app-wide
+jobs, which act on every user's data."""
 import hashlib
 import logging
 import os
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
-from .db import db_dep, now_iso
+from .db import OWNER_DISCORD_ID, db_dep, now_iso
 
 log = logging.getLogger("arturo.auth")
 
@@ -44,9 +47,9 @@ CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
 REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:8000/api/auth/callback")
 # Where the browser lands after login/logout — the dashboard's origin.
 APP_URL = os.environ.get("ARTURO_APP_URL", "http://localhost:3000").rstrip("/")
-# Comma-separated Discord user ids. Anyone else authenticates fine with
-# Discord and is then refused here.
-ALLOWED_DISCORD_IDS = {s.strip() for s in os.environ.get("ARTURO_ALLOWED_DISCORD_IDS", "").split(",") if s.strip()}
+# The only account allowed to run the app-wide jobs by hand. Deliberately
+# fixed in code: no environment variable or database row can add admins.
+ADMIN_DISCORD_ID = OWNER_DISCORD_ID
 SESSION_DAYS = int(os.environ.get("ARTURO_SESSION_DAYS", "30"))
 
 SESSION_COOKIE = "arturo_session"
@@ -94,16 +97,6 @@ def _login_error(reason: str) -> RedirectResponse:
     return RedirectResponse(f"{APP_URL}/login?{urlencode({'error': reason})}", status_code=303)
 
 
-def allowed_ids(conn: sqlite3.Connection) -> set[str]:
-    """Env allowlist, plus the id in the settings row if one is set there
-    (the bot will use the same column to know who it talks to)."""
-    ids = set(ALLOWED_DISCORD_IDS)
-    row = conn.execute("SELECT discord_user_id FROM settings WHERE id = 1").fetchone()
-    if row and row["discord_user_id"]:
-        ids.add(row["discord_user_id"])
-    return ids
-
-
 def require_user(request: Request, conn: sqlite3.Connection = Depends(db_dep)) -> dict:
     """Dependency: the user behind the session cookie, or 401."""
     token = request.cookies.get(SESSION_COOKIE)
@@ -117,6 +110,17 @@ def require_user(request: Request, conn: sqlite3.Connection = Depends(db_dep)) -
     if row is None:
         raise HTTPException(status_code=401, detail="Session expired")
     return _public_user(row)
+
+
+# The signed-in user, for handlers that scope data by user["id"].
+CurrentUser = Annotated[dict, Depends(require_user)]
+
+
+def require_admin(user: CurrentUser) -> dict:
+    """Dependency: the owner, signed in, or 403."""
+    if user["discord_id"] != ADMIN_DISCORD_ID:
+        raise HTTPException(status_code=403, detail="Admins only")
+    return user
 
 
 @router.get("/login")
@@ -176,10 +180,6 @@ async def callback(
     profile = me_res.json()
 
     discord_id = str(profile["id"])
-    if discord_id not in allowed_ids(conn):
-        log.info("login refused for discord id %s (%s)", discord_id, profile.get("username"))
-        return _login_error("not_allowed")
-
     now = now_iso()
     conn.execute(
         """INSERT INTO users (discord_id, username, display_name, avatar, created_at, last_login_at)
@@ -210,7 +210,7 @@ async def callback(
 
 
 @router.get("/me")
-def me(user: dict = Depends(require_user)):
+def me(user: CurrentUser):
     return user
 
 

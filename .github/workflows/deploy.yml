@@ -15,6 +15,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same Python as the backend image. A failing test stops the deploy
+      # before anything is built or shipped.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          pip install -r requirements-dev.txt
+          pytest -q
+
       - name: Compute image tag
         run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 

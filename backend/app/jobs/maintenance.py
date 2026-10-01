@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from ..db import DB_PATH, get_conn, log_event, now_iso
+from ..db import DB_PATH, app_timezone, get_conn, log_event, now_iso
 
 log = logging.getLogger("arturo.jobs")
 
@@ -44,28 +44,38 @@ def run_backup() -> dict:
 
 
 def _local_date(iso: str | None, tz: ZoneInfo) -> date | None:
+    """The local date of a stored timestamp, or None if it can't be read.
+    The API bounds new values, but a malformed or out-of-range value stored
+    earlier must only skip that one task, never abort the rollover for
+    every user."""
     if not iso:
         return None
     try:
         dt = datetime.fromisoformat(iso)
-    except ValueError:
+        if dt.tzinfo is None:
+            return dt.date()
+        return dt.astimezone(tz).date()
+    except (ValueError, OverflowError):
         return None
-    if dt.tzinfo is None:
-        return dt.date()
-    return dt.astimezone(tz).date()
 
 
 def run_rollover() -> dict:
     """4am daily. Resets recurring tasks, carries unfinished today tasks over,
-    promotes tasks due or committed today. Promotions land at the top."""
+    promotes tasks due or committed today. Promotions land at the top.
+
+    Runs once for every user, on the app-wide timezone. Steps 1-3 act on
+    each task by itself, so they need no per-user handling; step 4 orders
+    positions within each user's own tasks."""
     conn = get_conn()
     try:
-        tz = ZoneInfo(conn.execute("SELECT timezone FROM settings WHERE id = 1").fetchone()[0])
+        tz = ZoneInfo(app_timezone(conn))
         today = datetime.now(tz).date()
         stats = {"recurring_reset": 0, "carried_over": 0, "promoted": 0}
 
         # 1. Recurring tasks: streak bookkeeping, then reset and re-promote.
-        for r in conn.execute("SELECT * FROM tasks WHERE recurring = 1 AND state != 'dropped'").fetchall():
+        for r in conn.execute(
+            "SELECT * FROM tasks WHERE recurring = 1 AND state != 'dropped' ORDER BY id"
+        ).fetchall():
             new_streak = r["streak"] + 1 if r["state"] == "done" else 0
             conn.execute(
                 """UPDATE tasks SET state = 'not_started', today_flag = 1,
@@ -81,7 +91,7 @@ def run_rollover() -> dict:
         conn.execute("UPDATE tasks SET today_flag = 0 WHERE recurring = 0 AND today_flag = 1 AND state = 'done'")
         leftovers = conn.execute(
             """SELECT id FROM tasks WHERE recurring = 0 AND today_flag = 1
-               AND state NOT IN ('done','dropped')"""
+               AND state NOT IN ('done','dropped') ORDER BY id"""
         ).fetchall()
         for r in leftovers:
             conn.execute("UPDATE tasks SET nudge_level = 0 WHERE id = ?", (r["id"],))
@@ -89,10 +99,11 @@ def run_rollover() -> dict:
             stats["carried_over"] += 1
 
         # 3. Promote from the backlog: due today, committed today, or overdue.
+        # Promotions keep their backlog order when they land at the top.
         promoted_ids = []
         open_tasks = conn.execute(
             """SELECT * FROM tasks WHERE recurring = 0 AND today_flag = 0
-               AND state NOT IN ('done','dropped')"""
+               AND state NOT IN ('done','dropped') ORDER BY position, id"""
         ).fetchall()
         for r in open_tasks:
             dl = _local_date(r["deadline"], tz)
@@ -104,13 +115,23 @@ def run_rollover() -> dict:
                 promoted_ids.append(r["id"])
         stats["promoted"] = len(promoted_ids)
 
-        # 4. Renumber positions with promotions first, keeping relative order elsewhere.
+        # 4. Renumber positions with promotions first, keeping relative order
+        # elsewhere. Each user's tasks are numbered on their own, so one
+        # user's promotions never move another user's rows.
         if promoted_ids:
             promoted_set = set(promoted_ids)
-            rows = conn.execute("SELECT id FROM tasks ORDER BY position ASC, id ASC").fetchall()
-            ordered = promoted_ids + [r["id"] for r in rows if r["id"] not in promoted_set]
-            for pos, task_id in enumerate(ordered, start=1):
-                conn.execute("UPDATE tasks SET position = ? WHERE id = ?", (pos, task_id))
+            by_user: dict[int, list[int]] = {}
+            owner_of: dict[int, int] = {}
+            for r in conn.execute("SELECT id, user_id FROM tasks ORDER BY position ASC, id ASC").fetchall():
+                by_user.setdefault(r["user_id"], []).append(r["id"])
+                owner_of[r["id"]] = r["user_id"]
+            for uid, ids in by_user.items():
+                mine = [tid for tid in promoted_ids if owner_of[tid] == uid]
+                if not mine:
+                    continue  # nothing promoted: this user's positions stay exactly as they are
+                ordered = mine + [tid for tid in ids if tid not in promoted_set]
+                for pos, task_id in enumerate(ordered, start=1):
+                    conn.execute("UPDATE tasks SET position = ? WHERE id = ?", (pos, task_id))
 
         conn.commit()
         log.info("rollover complete: %s", stats)

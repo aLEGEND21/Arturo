@@ -3,7 +3,7 @@ services:
     build: ./backend
     container_name: arturo-backend
     restart: unless-stopped
-    # Discord OAuth credentials + allowlist (see backend/.env.example).
+    # Discord OAuth credentials (see backend/.env.example).
     env_file:
       - path: ./backend/.env
         required: false

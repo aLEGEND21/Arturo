@@ -1,6 +1,7 @@
 # Python
 backend/.venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 
 # SQLite data — live user data plus WAL/SHM sidecars, never committed

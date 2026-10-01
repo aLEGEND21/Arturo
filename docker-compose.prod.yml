@@ -7,7 +7,7 @@ services:
     image: arturo-backend:${TAG}
     container_name: arturo-backend
     restart: unless-stopped
-    # Discord OAuth credentials, public URLs, and the allowlist. Lives on the
+    # Discord OAuth credentials and public URLs. Lives on the
     # VPS only, never in the repo; keys as in backend/.env.example. Optional
     # so a missing file degrades to "login returns 503" rather than a stack
     # that will not start (which would also break deploy.sh's rollback).
