@@ -6,11 +6,9 @@ import useSWR from "swr";
 import { API_BASE, Me, api, fetcher } from "@/lib/api";
 import { buttonClass } from "@/lib/ui";
 
-// Tighter than a standalone button: the nav is a compact strip. On phones
-// the labels are what has to give, so each button collapses to its icon and
-// keeps its accessible name from aria-label.
+// Tighter than a standalone button: the nav is a compact strip. Labels stay
+// visible on phones too; an icon alone doesn't say what the button does.
 const navButton = "py-[5.1px] px-[10.2px] phone:px-[6.8px]";
-const navLabel = "phone:hidden";
 
 export function Nav() {
   // The login page has no session, so nothing here would load; render
@@ -66,7 +64,7 @@ export function Nav() {
             <polyline points="7 10 12 15 17 10" />
             <path d="M4 20h16" />
           </svg>
-          <span className={navLabel}>Export</span>
+          <span>Export</span>
         </a>
         {me ? (
           <button
@@ -94,7 +92,7 @@ export function Nav() {
                 <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
               </svg>
             )}
-            <span className={navLabel}>Sign out</span>
+            <span>Sign out</span>
           </button>
         ) : null}
       </div>
