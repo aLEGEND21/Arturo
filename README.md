@@ -56,6 +56,39 @@ owner account can call them. That account is hardcoded in `app/auth.py`.
 Since sign-up is open, inputs are bounded and each user has storage caps
 (the `MAX_*` constants in `app/db.py`).
 
+## Discord bot
+
+You can DM the bot to add tasks, see your list, mark things done, and
+remove tasks, in plain language ("add buy milk for today", "what's on my
+list", "done with the essay", "remove the gym one"). Removing works like
+the dashboard's Drop: the task leaves every list but stays in history.
+Claude reads each message and calls four tools (list, add, complete,
+remove) that use the same code as the dashboard, so tasks it adds land
+in the same place and log the same events (with `source = 'discord'`). It
+replies in a casual, lowercase texting voice.
+
+The bot only answers DMs, and only from Discord accounts that have already
+signed in on the dashboard. It matches you by Discord id and never acts on
+anyone else's tasks. Each person gets 50 messages per day (the day resets
+at 4am), because every message is a paid API call. Every exchange is
+logged to `messages` and `llm_calls`.
+
+It runs inside the backend process, so there's nothing extra to deploy. It
+starts when `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` are both set and is
+skipped otherwise. The code is in `backend/app/bot/`. To set up a bot:
+
+1. In the Discord developer portal, create an application and copy the
+   token from its Bot tab. Use a separate application for local dev, so
+   dev and prod never both answer your DMs. No privileged intents are
+   needed.
+2. Invite the bot to a server you're in (OAuth2 URL generator, `bot` scope,
+   Send Messages). Discord only lets you DM a bot you share a server with.
+3. Set the two env vars and restart the backend.
+
+Run only one copy of the backend per token. Host `uvicorn` and
+`docker compose` running at the same time with the same dev token would
+both answer every DM, and so would more than one uvicorn worker.
+
 Styling is a Tailwind theme defined in `frontend/src/app/globals.css`. Shared
 components are in `components/industry.tsx` and class recipes in
 `lib/ui.ts`. There's a custom `phone:` breakpoint at 768px.
@@ -71,6 +104,9 @@ components are in `components/industry.tsx` and class recipes in
   (or port 3000 under compose). In production it's
   `https://tasks.arnavm.com/api/auth/callback`.
 - `ARTURO_APP_URL`, where the browser lands after signing in.
+- `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` for the Discord bot
+  (optional). `ARTURO_BOT_MODEL` overrides the model, which defaults to
+  `claude-haiku-5-5`.
 
 The production copy lives locally as `backend/.env.production` (gitignored)
 and on the VPS as `/opt/arturo/.env`.
@@ -155,11 +191,9 @@ docker compose up -d
 
 ## Planned
 
-- A Discord bot for check-ins, nudges and adding tasks from chat. The
-  `messages` table and the work-hours and quiet-hours settings are already
-  there for it.
-- An LLM layer for nudge wording and end-of-day summaries, logging each call
-  to `llm_calls`.
+- Bot check-ins and nudges. The work-hours and quiet-hours settings and the
+  nudge columns on tasks are already there for them.
+- End-of-day summaries from the LLM, logged to `llm_calls` like bot replies.
 - Off-site backups.
 - A settings page. Right now settings can only be changed through the API.
 - Rate limits on sign-up if open sign-up gets abused.

@@ -9,6 +9,8 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validat
 
 Effort = Literal["short", "medium", "long"]
 State = Literal["not_started", "in_progress", "blocked", "done", "dropped"]
+# Where a change came from. Recorded on tasks.source and in event payloads.
+Source = Literal["dashboard", "discord"]
 
 # Timestamps are stored as strings: naive local ("2026-10-01T18:00"), a bare
 # date, or an ISO string with an offset. Years are bounded so converting any
@@ -53,7 +55,7 @@ class TaskCreate(BaseModel):
     starred: bool = False
     today: bool = False
     state: Literal["not_started", "in_progress"] = "not_started"
-    source: Literal["dashboard", "discord"] = "dashboard"
+    source: Source = "dashboard"
 
 
 class TaskUpdate(BaseModel):

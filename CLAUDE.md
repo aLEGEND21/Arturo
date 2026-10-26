@@ -17,13 +17,13 @@ rebuilt from the event log.
   Discord account.
 - Owner/maintainer: Arnav. The owner's Discord id is hardcoded as
   `OWNER_DISCORD_ID` in `backend/app/db.py`.
-- Planned but not built: a Discord bot (check-ins, nudges), an LLM layer
-  (nudge wording, summaries), a settings page, off-site backups. The schema
-  already has tables and columns for the bot (`messages`, `llm_calls`,
-  `nudge_level`, `last_nudged_at`, `snooze_*`, `handling`,
-  `last_user_update`, `source = 'discord'`, work/quiet hours in
-  `user_settings`). Many of these are unused by the UI today. Don't remove
-  them.
+- A Discord bot (`app/bot/`) answers DMs: Claude turns plain-language
+  messages into add, list, complete and remove tool calls on the sender's tasks.
+- Planned but not built: bot check-ins and nudges, LLM summaries, a settings
+  page, off-site backups. The schema already has columns for them
+  (`nudge_level`, `last_nudged_at`, `snooze_*`, `handling`,
+  `last_user_update`, work/quiet hours in `user_settings`). Many of these
+  are unused today. Don't remove them.
 
 ## Repo layout
 
@@ -38,6 +38,7 @@ backend/                FastAPI + SQLite (raw sqlite3, no ORM) + APScheduler
   app/routers/tasks.py  /api/tasks: list, create, get, events, patch, reorder
   app/routers/misc.py   boards, rules, context notes, settings, history, export
   app/jobs/maintenance.py  run_rollover, run_sweep, run_backup
+  app/bot/              Discord bot: client.py (py-cord, DMs), agent.py (Claude loop), tools.py
   tests/                pytest; isolation, auth, limits, behavior, migration
   data/                 dev database + backups (gitignored, real user data)
 frontend/               Next.js 16 (App Router), React 19, Tailwind 4, SWR, dnd-kit, sonner
@@ -210,13 +211,63 @@ rollback compatibility.
   section.
 - **Every meaningful change logs an event** with `log_event`: `created`
   (payload `{"source", "today"}`), `promoted`, `deferred`, `completed`,
-  `state_changed`, `dropped`, `committed`, `carried_over`. Day history
+  `state_changed`, `dropped`, `committed`, `carried_over`. Events from a
+  person carry `"source": "dashboard" | "discord"` in the payload, so the log
+  shows whether the bot or the web made a change (older rows have no source,
+  or `"manual"` on promoted/deferred, which was always the dashboard);
+  rollover events carry `reason` instead. Day history
   (`GET /api/history/{day}`) is reconstructed purely from these events, and
   `backlog_origin` is derived from the `created` event's `today` flag. When
   you add a state transition, log an event and check that `day_history` still
   classifies it correctly.
 - State side effects in `update_task`: `done` stamps `completed_at`; leaving
   `done` clears it; `dropped` clears `today_flag`.
+
+### Discord bot (`app/bot/`)
+
+- Runs **inside the API process**: `start_bot()` in `main.py`'s lifespan
+  starts py-cord's gateway client as a task on uvicorn's event loop, so
+  SQLite still has one owning process. It starts only when
+  `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` are set, and a bad token is
+  logged, never raised, so a Discord problem can't fail a deploy's health
+  check. **Keep uvicorn at one worker**: each worker would connect its own
+  bot and answer every DM. Dev uses a separate Discord application from prod.
+- DMs only (server messages are ignored). The account is the `users` row
+  for the author's Discord id; unknown ids are told to sign in on the
+  dashboard. The model never supplies a user id, so tool calls can't reach
+  another account.
+- The tools in `tools.py` **call the task code in `routers/tasks.py`
+  directly** (`create_task`, `list_tasks`, and `apply_task_update`, which the
+  PATCH route also wraps) with source `"discord"`. Removing is `state="dropped"` (the dashboard's Drop),
+  never a hard delete: day history is built from the event log. Change a handler and the bot changes with it.
+  `HTTPException`/`ValidationError` become `{"error": ...}` tool results.
+- `agent.py`: manual tool loop on `AsyncAnthropic`, model `ARTURO_BOT_MODEL`
+  (default `claude-haiku-5-5`), effort low, thinking disabled (it added over
+  a second per call for no gain), at most 6 rounds. Latency is almost all
+  API round trips (~0.7s each), so the user's open tasks
+  (`tools.task_snapshot`) ride on the newest user message: viewing takes
+  one call and add/complete/remove take two. Keep the snapshot on the newest
+  message, not in the system prompt; before the history, the model reads it
+  as stale and invents duplicates. The snapshot's "Finished today: x of y"
+  line (everything on today, recurring included) is counted in code so the
+  reply's "done x/y" can't be miscounted; per-section counts confused it.
+  Its lists are in dashboard order (`dashboard_today`/`dashboard_backlog`
+  mirror `regular`/`backlog` in `page.tsx`: today by position with done
+  tasks sunk and recurring separate, All tasks soonest-due first). Change
+  both together.
+  History holds only text, not past tool calls; the prompt tells the model
+  so, or it decides its earlier "marked it done" never happened. SQLite work
+  runs in `asyncio.to_thread` with its own connection. The incoming DM is
+  written to `messages` before the model runs (so the daily cap,
+  `MAX_BOT_MESSAGES_PER_DAY`, counts failed attempts too), and the reply plus
+  one `llm_calls` row per turn after. History is the user's last 10
+  messages within 6 hours. Replies use a lowercase, casual texting voice set
+  in the system prompt and enforced by `casual_case` (it lowercases sentence
+  starts but skips known task titles, which keep their capitals); the model
+  drifts back to sentence case without it. The canned replies in `client.py`
+  match the voice.
+- Tests (`tests/test_bot.py`) use a scripted stand-in for the model.
+  `conftest.py` blanks the bot env vars so tests never connect to Discord.
 
 ### Scheduled jobs (`app/jobs/maintenance.py`, wired in `main.py`)
 

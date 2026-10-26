@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
 from .auth import require_admin, require_user
+from .bot.client import start_bot, stop_bot
 from .clock import DAY_START_HOUR
 from .db import init_db
 from .jobs.maintenance import run_backup, run_rollover, run_sweep
@@ -32,7 +33,11 @@ async def lifespan(app: FastAPI):
     # The rollover defines the logical day boundary (clock.py).
     scheduler.add_job(run_rollover, CronTrigger(hour=DAY_START_HOUR, minute=0, timezone=TZ), id="rollover")
     scheduler.start()
+    # The Discord bot shares this event loop. Keep uvicorn on one worker:
+    # each worker would open its own gateway connection and answer every DM.
+    bot = await start_bot()
     yield
+    await stop_bot(bot)
     scheduler.shutdown(wait=False)
 
 

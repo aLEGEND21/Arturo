@@ -128,3 +128,18 @@ def test_rollover_resets_recurring_and_counts_streaks(alice):
     run_rollover()
     t = alice.get(f"/api/tasks/{r['id']}").json()
     assert (t["state"], t["streak"], t["today_flag"]) == ("not_started", 1, True)
+
+
+def test_dashboard_changes_are_tagged_in_the_event_log(alice):
+    t = make_task(alice, title="tagged", deadline="2026-11-01T10:00")
+    tid = t["id"]
+    alice.patch(f"/api/tasks/{tid}", json={"today_flag": True, "commitment_at": "2026-11-01T09:00"})
+    alice.patch(f"/api/tasks/{tid}", json={"state": "in_progress"})
+    alice.patch(f"/api/tasks/{tid}", json={"state": "done"})
+    alice.patch(f"/api/tasks/{tid}", json={"state": "not_started"})
+    alice.patch(f"/api/tasks/{tid}", json={"state": "dropped"})
+    events = alice.get(f"/api/tasks/{tid}/events").json()
+    assert [e["event_type"] for e in reversed(events)] == [
+        "created", "promoted", "committed", "state_changed", "completed", "state_changed", "dropped",
+    ]
+    assert {e["payload"]["source"] for e in events} == {"dashboard"}

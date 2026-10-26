@@ -12,6 +12,11 @@ from pathlib import Path
 
 _TMP = Path(tempfile.mkdtemp(prefix="arturo-tests-"))
 os.environ["ARTURO_DB"] = str(_TMP / "arturo.db")
+# backend/.env may hold real bot credentials, and app/__init__.py never
+# overrides a variable that is already set. Blank them so nothing a test
+# does can connect to Discord or spend API credit.
+os.environ["DISCORD_BOT_TOKEN"] = ""
+os.environ["ANTHROPIC_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

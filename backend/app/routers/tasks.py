@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import CurrentUser
 from ..db import MAX_TASKS, app_timezone, db_dep, log_event, now_iso, require_room, write_lock
-from ..schemas import ReorderRequest, TaskCreate, TaskUpdate
+from ..schemas import ReorderRequest, Source, TaskCreate, TaskUpdate
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -135,7 +135,7 @@ def create_task(body: TaskCreate, user: CurrentUser, conn: sqlite3.Connection = 
     task_id = cur.lastrowid
     log_event(conn, task_id, "created", {"source": body.source, "today": bool(today_flag)})
     if today_flag:
-        log_event(conn, task_id, "promoted", {"reason": "created_for_today"})
+        log_event(conn, task_id, "promoted", {"reason": "created_for_today", "source": body.source})
     conn.commit()
     return fetch_task(conn, task_id, uid)
 
@@ -161,7 +161,14 @@ def task_events(task_id: int, user: CurrentUser, conn: sqlite3.Connection = Depe
 
 @router.patch("/{task_id}")
 def update_task(task_id: int, body: TaskUpdate, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
-    uid = user["id"]
+    return apply_task_update(conn, task_id, body, user["id"], "dashboard")
+
+
+def apply_task_update(conn: sqlite3.Connection, task_id: int, body: TaskUpdate, uid: int, source: Source) -> dict:
+    """PATCH semantics for one of `uid`'s tasks. Shared by the API route and
+    the Discord bot; `source` goes into every event it logs, so the event log
+    shows where each change came from. Events from before this was recorded
+    have no source, or "manual" on promoted/deferred (always the dashboard)."""
     write_lock(conn)
     task = fetch_task(conn, task_id, uid)
     fields = body.model_dump(exclude_unset=True)
@@ -179,15 +186,15 @@ def update_task(task_id: int, body: TaskUpdate, user: CurrentUser, conn: sqlite3
         if state == "done":
             sets.append("completed_at = ?")
             params.append(now_iso())
-            log_event(conn, task_id, "completed", {"recurring": task["recurring"]})
+            log_event(conn, task_id, "completed", {"recurring": task["recurring"], "source": source})
         elif task["state"] == "done":
             sets.append("completed_at = NULL")
-            log_event(conn, task_id, "state_changed", {"from": "done", "to": state})
+            log_event(conn, task_id, "state_changed", {"from": "done", "to": state, "source": source})
         elif state == "dropped":
             sets.append("today_flag = 0")
-            log_event(conn, task_id, "dropped", None)
+            log_event(conn, task_id, "dropped", {"source": source})
         else:
-            log_event(conn, task_id, "state_changed", {"from": task["state"], "to": state})
+            log_event(conn, task_id, "state_changed", {"from": task["state"], "to": state, "source": source})
 
     today_flag = fields.pop("today_flag", None)
     if today_flag is not None and today_flag != task["today_flag"]:
@@ -202,14 +209,14 @@ def update_task(task_id: int, body: TaskUpdate, user: CurrentUser, conn: sqlite3
         log_event(
             conn, task_id,
             "promoted" if today_flag else "deferred",
-            {"source": "manual"},
+            {"source": source},
         )
 
     commitment_at = fields.pop("commitment_at", None)
     if commitment_at is not None and commitment_at != task["commitment_at"]:
         sets.append("commitment_at = ?")
         params.append(commitment_at or None)
-        log_event(conn, task_id, "committed", {"at": commitment_at})
+        log_event(conn, task_id, "committed", {"at": commitment_at, "source": source})
 
     for key, value in fields.items():
         sets.append(f"{key} = ?")

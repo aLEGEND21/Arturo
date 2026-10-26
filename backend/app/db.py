@@ -319,6 +319,9 @@ MAX_TASKS = 10_000
 MAX_BOARDS = 100
 MAX_RULES = 100  # all rules, active or not; 15 may be active at once
 MAX_ACTIVE_NOTES = 200
+# Discord DMs per user per logical day. Each one is a paid model call, and
+# the cap also bounds how fast messages and llm_calls rows can grow.
+MAX_BOT_MESSAGES_PER_DAY = 50
 
 
 def require_room(conn: sqlite3.Connection, count_sql: str, params: tuple, limit: int, what: str) -> None:

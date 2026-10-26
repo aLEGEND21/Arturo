@@ -82,7 +82,10 @@ function Dashboard() {
   const recurring = (todayTasks ?? []).filter((t) => t.recurring);
   // Completed tasks sink to the bottom for display only. Stored positions are
   // untouched, so unchecking puts a task straight back where it was. A stable
-  // partition (not a sort by position) keeps optimistic reorders intact.
+  // partition (not a sort by position) keeps optimistic reorders intact. The
+  // Discord bot lists today, and the backlog below, in the same order
+  // (dashboard_today/dashboard_backlog in backend/app/bot/tools.py); change
+  // both together.
   const regular = useMemo(() => {
     const list = (todayTasks ?? []).filter((t) => !t.recurring);
     return [...list.filter((t) => t.state !== "done"), ...list.filter((t) => t.state === "done")];
