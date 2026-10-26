@@ -10,10 +10,14 @@ message (or a task title written by someone else) can't steer a tool at
 another account's data."""
 import json
 import sqlite3
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from ..clock import logical_date
+from ..db import app_timezone
 from ..routers import tasks
 from ..schemas import TaskCreate, TaskUpdate
 
@@ -87,10 +91,60 @@ TOOLS = [
 ]
 
 
-def _brief(task: dict) -> dict:
+def _clock_time(dt: datetime) -> str:
+    return f"{dt.hour % 12 or 12}:{dt.minute:02d}{'am' if dt.hour < 12 else 'pm'}"
+
+
+def relative_day(d: date, today: date) -> str:
+    n = (d - today).days
+    if n == 0:
+        return "today"
+    if n == 1:
+        return "tomorrow"
+    if n == -1:
+        return "yesterday"
+    return f"in {n} days" if n > 0 else f"{-n} days ago"
+
+
+def deadline_label(deadline: str, tz: ZoneInfo, now: datetime | None = None) -> str:
+    """A deadline spelled out for the model: weekday, date, time, and how far
+    away it is, like "Tue 10/27 11:59pm (in 2 days)". The model was asked to
+    derive weekdays and "tomorrow" from raw strings and got them wrong, so
+    all date math happens here. Days are logical days (the 4am boundary), as
+    everywhere else in the app."""
+    local_now = (now or datetime.now(tz)).astimezone(tz).replace(tzinfo=None)
+    today = logical_date(local_now, tz)
+    try:
+        if "T" in deadline:
+            at = datetime.fromisoformat(deadline)
+            # Deadlines are naive local strings; one with an offset (allowed
+            # by the API) is shown in local time like the rest.
+            if at.tzinfo is not None:
+                at = at.astimezone(tz).replace(tzinfo=None)
+            # Shown with its calendar date, but "today"/"tomorrow" follow
+            # the logical day: 1am Monday is still Sunday night.
+            shown_day, day, time, overdue = at.date(), logical_date(at, tz), _clock_time(at), at < local_now
+        else:
+            shown_day = day = date.fromisoformat(deadline)
+            time, overdue = None, day < today
+    except ValueError:
+        return f"due {deadline}"
+    shown = f"{shown_day:%a} {shown_day.month}/{shown_day.day}"
+    if shown_day.year != today.year:
+        shown += f"/{shown_day.year}"
+    relative = "tonight" if day == today and shown_day != day else relative_day(day, today)
+    when = relative + (", overdue" if overdue else "")
+    return f"due {shown}" + (f" {time}" if time else "") + f" ({when})"
+
+
+def _tz(conn: sqlite3.Connection) -> ZoneInfo:
+    return ZoneInfo(app_timezone(conn))
+
+
+def _brief(task: dict, tz: ZoneInfo) -> dict:
     out = {"id": task["id"], "title": task["title"], "state": task["state"], "today": task["today_flag"]}
     if task["deadline"]:
-        out["deadline"] = task["deadline"]
+        out["deadline"] = deadline_label(task["deadline"], tz)
     if task["recurring"]:
         out["recurring"] = True
     return out
@@ -102,14 +156,14 @@ def _list(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
         return {"error": "view must be 'today' or 'backlog'"}
     if view == "backlog":
         rows = dashboard_backlog(conn, user)
-        return {"view": view, "tasks": [_brief(t) for t in rows[:MAX_LISTED]], "total": len(rows)}
+        return {"view": view, "tasks": [_brief(t, _tz(conn)) for t in rows[:MAX_LISTED]], "total": len(rows)}
     regular, recurring = dashboard_today(conn, user)
     return {
         "view": view,
-        "tasks": [_brief(t) for t in regular[:MAX_LISTED]],
+        "tasks": [_brief(t, _tz(conn)) for t in regular[:MAX_LISTED]],
         "done": sum(t["state"] == "done" for t in regular + recurring),
         "total": len(regular) + len(recurring),
-        "recurring": [_brief(t) for t in recurring],
+        "recurring": [_brief(t, _tz(conn)) for t in recurring],
     }
 
 
@@ -134,13 +188,14 @@ def dashboard_backlog(conn: sqlite3.Connection, user: dict) -> list[dict]:
     return sorted(rows, key=lambda t: (t["deadline"] is None, t["deadline"] or ""))
 
 
-def task_snapshot(conn: sqlite3.Connection, user: dict) -> tuple[str, list[str]]:
+def task_snapshot(conn: sqlite3.Connection, user: dict, now: datetime | None = None) -> tuple[str, list[str]]:
     """The user's lists in dashboard order, one task per line, sent with
     each message, plus every title in it. Having them up front saves a
     list_tasks round trip on most messages, which is most of the bot's
     latency."""
     regular, recurring = dashboard_today(conn, user)
     backlog = dashboard_backlog(conn, user)
+    tz = _tz(conn)
 
     def line(t: dict) -> str:
         # Titles are JSON-quoted so a newline or bracket in one can't pass
@@ -149,7 +204,7 @@ def task_snapshot(conn: sqlite3.Connection, user: dict) -> tuple[str, list[str]]
         if t["state"] != "not_started":
             parts.append(t["state"])
         if t["deadline"]:
-            parts.append(f"due {t['deadline']}")
+            parts.append(deadline_label(t["deadline"], tz, now))
         return "- " + ", ".join(parts)
 
     # Counted here, not left to the model, so "done x/y" is always right.
@@ -186,7 +241,7 @@ def _add(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
         notes=args.get("notes") or None,
         source="discord",
     )
-    return {"created": _brief(tasks.create_task(body, user, conn))}
+    return {"created": _brief(tasks.create_task(body, user, conn), _tz(conn))}
 
 
 def _complete(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
@@ -194,7 +249,7 @@ def _complete(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
     if not isinstance(task_id, int):
         return {"error": "task_id must be an integer"}
     task = tasks.apply_task_update(conn, task_id, TaskUpdate(state="done"), user["id"], "discord")
-    return {"completed": _brief(task)}
+    return {"completed": _brief(task, _tz(conn))}
 
 
 def _remove(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
@@ -204,7 +259,7 @@ def _remove(conn: sqlite3.Connection, user: dict, args: dict) -> dict:
     if not isinstance(task_id, int):
         return {"error": "task_id must be an integer"}
     task = tasks.apply_task_update(conn, task_id, TaskUpdate(state="dropped"), user["id"], "discord")
-    return {"removed": _brief(task)}
+    return {"removed": _brief(task, _tz(conn))}
 
 
 _HANDLERS = {"list_tasks": _list, "add_task": _add, "complete_task": _complete, "remove_task": _remove}

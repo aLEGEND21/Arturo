@@ -255,6 +255,10 @@ rollback compatibility.
   mirror `regular`/`backlog` in `page.tsx`: today by position with done
   tasks sunk and recurring separate, All tasks soonest-due first). Change
   both together.
+  **The model never does date math**: it got weekdays and "tomorrow" wrong.
+  Deadlines reach it as labels from `tools.deadline_label` ("due Tue 10/27
+  11:59pm (in 2 days)", relative words on the logical day), and the system
+  prompt carries a 14-day calendar for days the user names ("due friday").
   History holds only text, not past tool calls; the prompt tells the model
   so, or it decides its earlier "marked it done" never happened. SQLite work
   runs in `asyncio.to_thread` with its own connection. The incoming DM is

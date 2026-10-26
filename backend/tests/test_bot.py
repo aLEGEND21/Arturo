@@ -10,7 +10,7 @@ from anthropic.types import Message, TextBlock, ToolUseBlock, Usage
 from app.bot import agent
 from app.bot.client import split_message
 from app.bot import tools
-from app.bot.tools import run_tool, task_snapshot
+from app.bot.tools import deadline_label, run_tool, task_snapshot
 from app.clock import logical_day_start, logical_today
 from app.db import now_iso
 
@@ -22,9 +22,11 @@ def user_of(client) -> dict:
 def test_add_task_logs_a_discord_creation(alice, db):
     out = run_tool(db, user_of(alice), "add_task", {"title": "buy milk", "today": True})
     task = out["created"]
-    assert task["today"] is True and task["deadline"].endswith("T23:59")
-    row = db.execute("SELECT source, user_id FROM tasks WHERE id = ?", (task["id"],)).fetchone()
+    # The model sees a label; the stored deadline keeps the naive local format.
+    assert task["today"] is True and task["deadline"].startswith("due ") and " 11:59pm (" in task["deadline"]
+    row = db.execute("SELECT source, user_id, deadline FROM tasks WHERE id = ?", (task["id"],)).fetchone()
     assert (row["source"], row["user_id"]) == ("discord", alice.user_id)
+    assert row["deadline"].endswith("T23:59")
     events = [e["event_type"] for e in alice.get(f"/api/tasks/{task['id']}/events").json()]
     assert events == ["promoted", "created"]
 
@@ -123,12 +125,41 @@ def test_snapshot_lists_only_the_callers_open_tasks(alice, bob, db):
     run_tool(db, user_of(alice), "remove_task", {"task_id": gone["id"]})
     run_tool(db, user_of(bob), "add_task", {"title": "bob's secret", "today": True})
 
-    snap, titles = task_snapshot(db, user_of(alice))
+    snap, titles = task_snapshot(db, user_of(alice), now=SUNDAY_EVENING)
     assert sorted(titles) == ["gym", "taxes"]
     today, backlog = snap.split("All tasks")
     assert '"gym"' in today and "taxes" not in today
-    assert f'id {later["created"]["id"]}: "taxes", due 2026-11-15' in backlog
+    assert f'id {later["created"]["id"]}: "taxes", due Sun 11/15 (in 21 days)' in backlog
     assert "dropped one" not in snap and "bob" not in snap
+
+
+# Sunday 10/25/2026, 8:16pm Eastern: the evening the bot called Tuesday
+# 10/27 "tomorrow, Monday".
+SUNDAY_EVENING = datetime(2026, 10, 25, 20, 16, tzinfo=ZoneInfo("America/New_York"))
+
+
+def test_deadline_labels_do_the_date_math():
+    tz, now = ZoneInfo("America/New_York"), SUNDAY_EVENING
+    assert deadline_label("2026-10-27T23:59", tz, now) == "due Tue 10/27 11:59pm (in 2 days)"
+    assert deadline_label("2026-10-26", tz, now) == "due Mon 10/26 (tomorrow)"
+    assert deadline_label("2026-10-25T23:59", tz, now) == "due Sun 10/25 11:59pm (today)"
+    assert deadline_label("2026-10-25T09:00", tz, now) == "due Sun 10/25 9:00am (today, overdue)"
+    assert deadline_label("2026-10-14", tz, now) == "due Wed 10/14 (11 days ago, overdue)"
+    assert deadline_label("2027-01-03T08:30", tz, now) == "due Sun 1/3/2027 8:30am (in 70 days)"
+    # Before 4am it is still the previous logical day.
+    assert deadline_label("2026-10-26T01:30", tz, now) == "due Mon 10/26 1:30am (tonight)"
+    one_am_monday = datetime(2026, 10, 26, 1, 0, tzinfo=tz)
+    assert deadline_label("2026-10-26T23:59", tz, one_am_monday) == "due Mon 10/26 11:59pm (tomorrow)"
+    # An offset is converted to local time; junk is passed through.
+    assert deadline_label("2026-10-27T03:59:00+00:00", tz, now) == "due Mon 10/26 11:59pm (tomorrow)"
+    assert deadline_label("someday", tz, now) == "due someday"
+
+
+def test_system_prompt_has_a_calendar():
+    prompt = agent.system_prompt(ZoneInfo("America/New_York"))
+    today = logical_today(ZoneInfo("America/New_York"))
+    friday = next(today + timedelta(days=n) for n in range(7) if (today + timedelta(days=n)).weekday() == 4)
+    assert f"Fri {friday.isoformat()}" in prompt
 
 
 def test_today_counts_finished_tasks(alice, db):
@@ -196,6 +227,12 @@ def test_casual_case_keeps_task_titles():
     )
     assert agent.casual_case("Wait, I think I'll ask: Call I.R.S (id 12)?", {"Call I.R.S"}) == (
         "wait, i think i'll ask: Call I.R.S?"
+    )
+    # Bullets get a title's own capitals back; prose is left as the model wrote it.
+    titles = {"Build nightstand", "Buy Halloween costume", "Work out"}
+    reply = "- build nightstand\n- ~~work out~~\n- buy halloween costume, due Sun 10/25\n\ngo work out lol"
+    assert agent.casual_case(reply, titles) == (
+        "- Build nightstand\n- ~~Work out~~\n- Buy Halloween costume, due Sun 10/25\n\ngo work out lol"
     )
 
 
