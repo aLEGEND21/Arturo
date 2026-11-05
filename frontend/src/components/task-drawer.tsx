@@ -338,8 +338,10 @@ export function TaskDrawer({
           {/* Recurring tasks reset daily: no due date, so effort gets its own row. */}
           {task.recurring ? <Field label="Effort">{effortSeg}</Field> : null}
 
+          {/* Side by side, the nowrap due label and three effort buttons need
+              more width than a phone drawer has, so they stack there. */}
           {!task.recurring ? (
-            <div className="flex gap-3.5">
+            <div className="flex gap-3.5 phone:flex-col phone:gap-4">
               <Field label="Due" className="flex-1">
                 <div
                   className={cn(
@@ -409,7 +411,7 @@ export function TaskDrawer({
             />
           </Field>
 
-          <div>
+          <div className="mt-2">
             <h6 className="mt-0 mr-0 mb-2 ml-0 text-muted">Event history</h6>
             <div className="flex flex-col text-[12.5px]">
               {(events ?? []).map((e, i) => (
