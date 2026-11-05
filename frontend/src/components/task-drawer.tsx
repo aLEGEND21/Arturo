@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import useSWR from "swr";
 import { toast } from "sonner";
 import {
@@ -20,6 +21,7 @@ import {
 import { buttonClass, inputClass, kickerClass } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import { Blueprint, Button, CheckIcon, CloseIcon, Field, Seg, Tag } from "./industry";
+import { Linkified } from "./linkified";
 
 export { revalidateAll };
 
@@ -49,6 +51,99 @@ function fmtEventDate(iso: string): string {
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   if (sameDay) return `Today ${time}`;
   return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** Character offset into `root`'s text at a viewport point, or null when the
+ *  point isn't over its text (padding, empty space past the last line). */
+function textOffsetAt(root: HTMLElement, x: number, y: number): number | null {
+  let node: Node | null = null;
+  let offset = 0;
+  if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (pos) ({ offsetNode: node, offset } = pos);
+  } else if (document.caretRangeFromPoint) {
+    // Safari before 26 only has the older WebKit API.
+    const range = document.caretRangeFromPoint(x, y);
+    if (range) ({ startContainer: node, startOffset: offset } = range);
+  }
+  if (!node || node.nodeType !== Node.TEXT_NODE || !root.contains(node)) return null;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let total = 0;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n === node) return total + offset;
+    total += n.textContent?.length ?? 0;
+  }
+  return null;
+}
+
+/* A textarea can't hold clickable links, so at rest the notes render as text
+   with live links, styled like the textarea. Clicking anywhere but a link
+   swaps in the real textarea with the caret where the click landed. */
+function NotesField({
+  value,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function startEditing(caret: number | null, height?: number) {
+    // Render and focus inside the same event: iOS Safari only raises the
+    // keyboard for a focus() that happens during the tap itself.
+    flushSync(() => setEditing(true));
+    const el = textareaRef.current;
+    if (!el) return;
+    // Open at the rendered text's height so the field doesn't jump.
+    if (height) el.style.height = `${height}px`;
+    el.focus();
+    const at = caret ?? value.length;
+    el.setSelectionRange(at, at);
+  }
+
+  if (editing) {
+    return (
+      <textarea
+        ref={textareaRef}
+        className={cn(inputClass, "min-h-[56px] resize-y")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          onBlur();
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Notes"
+      tabIndex={0}
+      className={cn(inputClass, "min-h-[56px] cursor-text break-words whitespace-pre-wrap")}
+      onClick={(e) => {
+        if ((e.target as Element).closest("a")) return;
+        // Leave a drag-selection alone so the text can be copied.
+        if (window.getSelection()?.isCollapsed === false) return;
+        const root = e.currentTarget;
+        startEditing(textOffsetAt(root, e.clientX, e.clientY), root.offsetHeight);
+      }}
+      onFocus={(e) => {
+        // Keyboard focus edits right away; a click focuses the div too, but
+        // must wait for onClick so a link inside can still be followed.
+        if (e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) {
+          startEditing(null, e.currentTarget.offsetHeight);
+        }
+      }}
+    >
+      <Linkified text={value} />
+    </div>
+  );
 }
 
 export function TaskDrawer({
@@ -299,12 +394,11 @@ export function TaskDrawer({
           ) : null}
 
           <Field label="Notes — task content">
-            <textarea
-              className={cn(inputClass, "min-h-[56px] resize-y")}
+            <NotesField
               value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value);
-                patchTaskCache(task.id, { notes: e.target.value || null });
+              onChange={(v) => {
+                setNotes(v);
+                patchTaskCache(task.id, { notes: v || null });
               }}
               onBlur={() => {
                 if (notes !== savedNotes) {

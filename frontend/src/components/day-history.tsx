@@ -3,6 +3,7 @@
 import { HistoryTask, fmtTime } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Blueprint, Square } from "./industry";
+import { Linkified } from "./linkified";
 import { rowPadding, rowSubline, rowTitle } from "./task-row";
 
 function statusLabel(t: HistoryTask): { text: string; tone: "muted" | "accent" } {
@@ -32,7 +33,9 @@ function HistoryRow({ task, isLast }: { task: HistoryTask; isLast: boolean }) {
           {task.title}
         </div>
         {task.notes ? (
-          <div className={rowSubline}>{task.notes.replace(/\s+/g, " ").trim()}</div>
+          <div className={rowSubline}>
+            <Linkified text={task.notes.replace(/\s+/g, " ").trim()} />
+          </div>
         ) : null}
       </div>
       <span

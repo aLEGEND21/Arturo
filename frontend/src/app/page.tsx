@@ -19,6 +19,7 @@ import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
 import { ContextStrip } from "@/components/context-strip";
 import { Blueprint, OverdueTag, Square } from "@/components/industry";
+import { Linkified } from "@/components/linkified";
 import { TaskDrawer, revalidateAll } from "@/components/task-drawer";
 import { TodayBoards } from "@/components/today-list";
 import {
@@ -299,7 +300,9 @@ function Dashboard() {
                   <div className={rowTextClass(2)}>
                     <div className={cn(rowTitle, "font-medium")}>{t.title}</div>
                     {t.notes ? (
-                      <div className={rowSubline}>{t.notes.replace(/\s+/g, " ").trim()}</div>
+                      <div className={rowSubline}>
+                        <Linkified text={t.notes.replace(/\s+/g, " ").trim()} />
+                      </div>
                     ) : null}
                   </div>
                   <span className={rowMetaClass(2, overdue)}>

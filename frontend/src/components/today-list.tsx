@@ -25,6 +25,7 @@ import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EffortDot } from "./effort-dot";
 import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square, Tag } from "./industry";
+import { Linkified } from "./linkified";
 import {
   rowMetaClass,
   rowSubline,
@@ -111,7 +112,11 @@ export function TodayRow({
         >
           {task.title}
         </div>
-        {sub ? <div className={rowSubline}>{sub}</div> : null}
+        {sub ? (
+          <div className={rowSubline}>
+            <Linkified text={sub} />
+          </div>
+        ) : null}
       </div>
       <span className={rowMetaClass(3, hasChip)}>
         {!done && overdue ? <OverdueTag /> : null}
@@ -169,7 +174,9 @@ function RecurringRow({
       <div className="min-w-0 flex-1">
         <div className={cn(rowTitle, done && "text-neutral-500 line-through")}>{task.title}</div>
         {task.notes ? (
-          <div className={rowSubline}>{task.notes.replace(/\s+/g, " ").trim()}</div>
+          <div className={rowSubline}>
+            <Linkified text={task.notes.replace(/\s+/g, " ").trim()} />
+          </div>
         ) : null}
       </div>
       <Tag tone={done ? "accent" : "neutral"} className="gap-1">
