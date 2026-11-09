@@ -17,3 +17,6 @@ backend/data/
 
 # OS
 .DS_Store
+
+# Launch videos from /brag (renders, frames, scratch)
+brag-output*/
