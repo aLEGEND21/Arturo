@@ -17,10 +17,11 @@ import {
   patchTaskCache,
   removeFromTodayCache,
   revalidateAll,
+  streakLabel,
 } from "@/lib/api";
 import { buttonClass, inputClass, kickerClass } from "@/lib/ui";
 import { cn } from "@/lib/utils";
-import { Blueprint, Button, CheckIcon, CloseIcon, Field, Seg, Tag } from "./industry";
+import { Blueprint, Button, CheckIcon, CloseIcon, Field, FlameIcon, Seg, Tag } from "./industry";
 import { Linkified } from "./linkified";
 import { RecurringHeatmap } from "./recurring-heatmap";
 
@@ -316,7 +317,14 @@ export function TaskDrawer({
           </div>
           {task.recurring || task.nudge_level > 0 ? (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {task.recurring ? <Tag tone="neutral">recurring · {task.streak}-day streak</Tag> : null}
+              {task.recurring ? (
+                <Tag tone="neutral" className="gap-1">
+                  recurring ·
+                  <FlameIcon />
+                  {streakLabel(task)}
+                  <span className="sr-only"> streak</span>
+                </Tag>
+              ) : null}
               {task.nudge_level > 0 ? <Tag tone="neutral">nudge level {task.nudge_level}</Tag> : null}
             </div>
           ) : null}

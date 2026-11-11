@@ -21,7 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Task, deadlineTone, fmtDue, fmtTime } from "@/lib/api";
+import { Task, deadlineTone, fmtDue, fmtTime, streakLabel } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EffortDot } from "./effort-dot";
 import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square, Tag } from "./industry";
@@ -181,7 +181,8 @@ function RecurringRow({
       </div>
       <Tag tone={done ? "accent" : "neutral"} className="gap-1">
         <FlameIcon />
-        {task.streak + (done ? 1 : 0)}-day streak
+        {streakLabel(task)}
+        <span className="sr-only"> streak</span>
       </Tag>
       <EffortDot task={task} />
     </div>

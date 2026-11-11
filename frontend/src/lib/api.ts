@@ -271,6 +271,14 @@ export async function api<T>(
   return res.json();
 }
 
+/** A recurring task's streak as shown beside the flame: "1 day", "3 days".
+ *  The stored streak only moves at the rollover, so today is added once
+ *  the task is done. */
+export function streakLabel(task: Task): string {
+  const days = task.streak + (task.state === "done" ? 1 : 0);
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
 /** Working days end at the 4am rollover, not midnight (backend clock.py). */
 export const DAY_START_HOUR = 4;
 
