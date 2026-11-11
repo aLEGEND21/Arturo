@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { buttonClass, inputClass, kickerClass } from "@/lib/ui";
 import { cn } from "@/lib/utils";
-import { Blueprint, Button, CheckIcon, CloseIcon, Field, FlameIcon, Seg, Tag } from "./industry";
+import { Blueprint, Button, CheckIcon, CloseIcon, Field, FlameIcon, Seg } from "./industry";
 import { Linkified } from "./linkified";
 import { RecurringHeatmap } from "./recurring-heatmap";
 import { EventRowsSkeleton } from "./skeletons";
@@ -317,16 +317,26 @@ export function TaskDrawer({
             </Button>
           </div>
           {task.recurring || task.nudge_level > 0 ? (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
+            // Plain text in the Tag's type, not Tags: a Tag's side padding
+            // would indent the words from the title above, and its fill is
+            // too close to the canvas to show the box that explains it.
+            <div className="mt-2.5 flex flex-wrap items-center gap-1 text-[11px] tracking-[0.02em] text-neutral-800">
               {task.recurring ? (
-                <Tag tone="neutral" className="gap-1">
-                  recurring ·
+                <>
+                  <span>Recurring</span>
+                  {/* The extra 2px on the left matches the blank edge inside
+                      the flame's viewBox, which is what centers the dot
+                      between the word and the flame. */}
+                  <span className="ml-0.5">·</span>
                   <FlameIcon />
-                  {streakLabel(task)}
-                  <span className="sr-only"> streak</span>
-                </Tag>
+                  <span>
+                    {streakLabel(task)}
+                    <span className="sr-only"> streak</span>
+                  </span>
+                </>
               ) : null}
-              {task.nudge_level > 0 ? <Tag tone="neutral">nudge level {task.nudge_level}</Tag> : null}
+              {task.recurring && task.nudge_level > 0 ? <span className="mx-0.5">·</span> : null}
+              {task.nudge_level > 0 ? <span>nudge level {task.nudge_level}</span> : null}
             </div>
           ) : null}
         </div>
