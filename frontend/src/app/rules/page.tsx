@@ -5,11 +5,13 @@ import useSWR, { mutate } from "swr";
 import { toast } from "sonner";
 import { Rule, api, fetcher } from "@/lib/api";
 import { Blueprint, Button, Square } from "@/components/industry";
+import { RuleRowsSkeleton } from "@/components/skeletons";
 import { inputClass } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
 export default function RulesPage() {
   const { data: rules, error } = useSWR<Rule[]>("/api/rules", fetcher);
+  const loading = !rules && !error;
   const [text, setText] = useState("");
 
   async function addRule() {
@@ -89,7 +91,9 @@ export default function RulesPage() {
             </Button>
           </div>
         ))}
-        {(rules ?? []).length === 0 ? (
+        {loading ? (
+          <RuleRowsSkeleton />
+        ) : (rules ?? []).length === 0 ? (
           <div className="p-3.5 text-[13px] text-muted">No rules yet.</div>
         ) : null}
       </Blueprint>

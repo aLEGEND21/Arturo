@@ -18,8 +18,9 @@ import { BacklogAddRow, TodayAddRow } from "@/components/add-row";
 import { DayHistoryBoards } from "@/components/day-history";
 import { EffortDot } from "@/components/effort-dot";
 import { ContextStrip } from "@/components/context-strip";
-import { Blueprint, OverdueTag, Square } from "@/components/industry";
+import { Blueprint, OverdueTag, SkeletonText, Square } from "@/components/industry";
 import { Linkified } from "@/components/linkified";
+import { TaskRowsSkeleton } from "@/components/skeletons";
 import { TaskDrawer, revalidateAll } from "@/components/task-drawer";
 import { TodayBoards } from "@/components/today-list";
 import {
@@ -40,18 +41,81 @@ function localIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// useSearchParams needs a Suspense boundary during prerendering.
+/* The two-column frame, shared by the dashboard and its fallback. */
+const columnsClass = "grid grid-cols-[1fr_1fr] gap-6 px-page py-5 phone:grid-cols-[1fr]";
+// min-w-0 lets long nowrap notes truncate instead of widening the 1fr track
+const columnClass = "flex min-w-0 flex-col gap-3.5";
+
+// The two counters' type, shared with their loading stand-ins.
+const doneCountClass = "font-heading text-[22px] leading-[1.12] font-semibold";
+const openCountClass = "text-[12px]";
+const doneCountSkeleton = (
+  <SkeletonText className={doneCountClass}>
+    0<span className="text-[16px]"> / 0 done</span>
+  </SkeletonText>
+);
+const openCountSkeleton = <SkeletonText className={openCountClass}>0 open</SkeletonText>;
+
+// useSearchParams needs a Suspense boundary during prerendering. The page
+// is prerendered, so the fallback is what the static HTML holds until the
+// scripts run.
 export default function DashboardPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DashboardFallback />}>
       <Dashboard />
     </Suspense>
   );
 }
 
+/* The dashboard in its loading state, minus everything that needs the clock
+   or the URL: the date and day arrows would be frozen at build time. Keep
+   it the shape of what Dashboard renders while the lists load. */
+function DashboardFallback() {
+  return (
+    <div className={columnsClass}>
+      <div className={columnClass}>
+        <div className="flex items-baseline gap-3">
+          <h3 className="m-0">Today</h3>
+          <span className="flex-1" />
+          {doneCountSkeleton}
+        </div>
+        {/* Nothing to act on yet, so the handlers do nothing. */}
+        <TodayBoards
+          regular={[]}
+          recurring={[]}
+          loading
+          addRow={<TodayAddRow />}
+          onToggleDone={noop}
+          onOpen={noop}
+          onReorderRegular={noop}
+          onReorderRecurring={noop}
+          onCrossMove={noop}
+        />
+      </div>
+      <div className={columnClass}>
+        <div className="flex items-baseline gap-3">
+          <h3 className="m-0">All tasks</h3>
+          {openCountSkeleton}
+        </div>
+        <Blueprint>
+          <BacklogAddRow />
+          <TaskRowsSkeleton kind="backlog" />
+        </Blueprint>
+      </div>
+    </div>
+  );
+}
+
+const noop = () => {};
+
 function Dashboard() {
   const { data: todayTasks, error } = useSWR<Task[]>(TODAY_KEY, fetcher);
-  const { data: allTasks } = useSWR<Task[]>(ALL_KEY, fetcher);
+  const { data: allTasks, error: allError } = useSWR<Task[]>(ALL_KEY, fetcher);
+  // Loading means no answer of either kind yet. After an error the lists
+  // fall back to their empty states under the banner, rather than pulsing
+  // through every retry.
+  const todayLoading = !todayTasks && !error;
+  const allLoading = !allTasks && !allError;
   const { mutate } = useSWRConfig();
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -210,6 +274,7 @@ function Dashboard() {
   ).length;
   const shownDone = dayOffset === 0 ? doneCount : histDone;
   const shownTotal = dayOffset === 0 ? regular.length : histTotal;
+  const dayLoading = dayOffset === 0 ? todayLoading : !history;
 
   return (
     <div>
@@ -222,10 +287,9 @@ function Dashboard() {
       ) : null}
 
       {/* Two columns; stacks Today above All tasks on phones */}
-      <div className="grid grid-cols-[1fr_1fr] gap-6 px-page py-5 phone:grid-cols-[1fr]">
+      <div className={columnsClass}>
         {/* — Today column — */}
-        {/* min-w-0 lets long nowrap notes truncate instead of widening the 1fr track */}
-        <div className="flex min-w-0 flex-col gap-3.5">
+        <div className={columnClass}>
           <div className="relative flex items-baseline gap-3">
             <h3 className="m-0">{heading}</h3>
             {/* Absolutely centered in the column so the arrows stay put no
@@ -240,16 +304,21 @@ function Dashboard() {
               />
             </span>
             <span className="flex-1" />
-            <span className="font-heading text-[22px] leading-[1.12] font-semibold text-accent-700">
-              {shownDone}
-              <span className="text-[16px] text-neutral-500"> / {shownTotal} done</span>
-            </span>
+            {dayLoading ? (
+              doneCountSkeleton
+            ) : (
+              <span className={cn(doneCountClass, "text-accent-700")}>
+                {shownDone}
+                <span className="text-[16px] text-neutral-500"> / {shownTotal} done</span>
+              </span>
+            )}
           </div>
 
           {dayOffset === 0 ? (
             <TodayBoards
               regular={regular}
               recurring={recurring}
+              loading={todayLoading}
               addRow={<TodayAddRow />}
               onToggleDone={toggleDone}
               onOpen={(t) => setSelectedId(t.id)}
@@ -261,16 +330,20 @@ function Dashboard() {
             <DayHistoryBoards tasks={history.tasks} />
           ) : (
             <Blueprint>
-              <div className="p-row-x text-[13px] text-muted">Loading…</div>
+              <TaskRowsSkeleton kind="history" />
             </Blueprint>
           )}
         </div>
 
         {/* — All tasks column — */}
-        <div className="flex min-w-0 flex-col gap-3.5">
+        <div className={columnClass}>
           <div className="flex items-baseline gap-3">
             <h3 className="m-0">All tasks</h3>
-            <span className="text-[12px] text-muted">{backlog.length} open</span>
+            {allLoading ? (
+              openCountSkeleton
+            ) : (
+              <span className={cn(openCountClass, "text-muted")}>{backlog.length} open</span>
+            )}
           </div>
 
           <Blueprint>
@@ -320,7 +393,9 @@ function Dashboard() {
                 </div>
               );
             })}
-            {backlog.length === 0 ? (
+            {allLoading ? (
+              <TaskRowsSkeleton kind="backlog" />
+            ) : backlog.length === 0 ? (
               <div className={cn("p-row-x text-[13px] text-muted", recentDone.length > 0 && "border-b border-divider")}>
                 No open tasks.
               </div>

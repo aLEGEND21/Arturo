@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Blueprint, Button, CheckIcon, CloseIcon, Field, FlameIcon, Seg, Tag } from "./industry";
 import { Linkified } from "./linkified";
 import { RecurringHeatmap } from "./recurring-heatmap";
+import { EventRowsSkeleton } from "./skeletons";
 
 export { revalidateAll };
 
@@ -184,7 +185,7 @@ export function TaskDrawer({
     setEditingId(null);
   }
 
-  const { data: events } = useSWR<TaskEvent[]>(
+  const { data: events, error: eventsError } = useSWR<TaskEvent[]>(
     task ? `/api/tasks/${task.id}/events` : null,
     fetcher
   );
@@ -437,7 +438,11 @@ export function TaskDrawer({
                   <span>{eventLine(e)}</span>
                 </div>
               ))}
-              {(events ?? []).length === 0 ? <span className="text-muted">No events yet.</span> : null}
+              {!events && !eventsError ? (
+                <EventRowsSkeleton />
+              ) : (events ?? []).length === 0 ? (
+                <span className="text-muted">No events yet.</span>
+              ) : null}
             </div>
           </div>
         </div>

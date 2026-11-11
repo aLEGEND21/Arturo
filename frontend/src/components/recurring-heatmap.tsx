@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import useSWR from "swr";
 import { HeatmapDay, HeatmapStatus, Task, TaskState, fetcher } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Skeleton, SkeletonText } from "./industry";
 
 /* Week columns the server sends (HEATMAP_WEEKS in backend/app/routers/
-   tasks.py), used here only to draw the placeholder before the data
+   tasks.py), used here only to size the placeholder before the data
    arrives. Change both together. */
 const WEEKS = 26;
 /* A drawer narrower than 400px (a phone) shows only the newest weeks, so
@@ -59,15 +60,36 @@ const monthName = (iso: string) => parseDay(iso).toLocaleDateString(undefined, {
    many as there are visible weeks, so the grid always spans the drawer. */
 const weekColumns = "grid grid-flow-col auto-cols-fr gap-[3px]";
 
+/* A piece of the heatmap's text, or a bar of the same size while loading. */
+function Text({
+  loading,
+  className,
+  children,
+}: {
+  loading: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  return loading ? (
+    <SkeletonText className={className}>{children}</SkeletonText>
+  ) : (
+    <span className={className}>{children}</span>
+  );
+}
+
 /* A recurring task's last six months as a commit-graph style grid: one
    column per week, Sunday at the top, today the last tile. */
 export function RecurringHeatmap({ task }: { task: Task }) {
   // Temporary tasks (negative ids) don't exist on the server yet.
-  const { data } = useSWR<HeatmapDay[]>(
+  const { data, error } = useSWR<HeatmapDay[]>(
     task.id > 0 ? `/api/tasks/${task.id}/heatmap` : null,
     fetcher
   );
   const [hovered, setHovered] = useState<number | null>(null);
+  // While loading, every part is a skeleton: the title and figures as bars,
+  // the graph as one solid block. A grid of empty tiles would read as a
+  // task that was never done, not as one still loading.
+  const loading = !data && !error;
 
   // The last day is today. Draw it from the task itself so a state change
   // shows at once, like every other optimistic patch, without a refetch.
@@ -123,111 +145,140 @@ export function RecurringHeatmap({ task }: { task: Task }) {
       {/* Styled like a Field label; not a Field because the text depends on
           the container width. */}
       <div className="mb-[5px] flex items-baseline justify-between gap-3 text-[12px] text-label">
-        <span>
+        <Text loading={loading}>
           <span className={hideWhenNarrow}>Last 6 months</span>
           <span className={hideWhenWide}>Last 4 months</span>
-        </span>
+        </Text>
         {/* The figures cover the weeks on screen, so a narrow drawer gets
             its own. */}
-        <span className="whitespace-nowrap text-muted tabular-nums">
-          <span className={hideWhenNarrow}>{stats(0)}</span>
-          <span className={hideWhenWide}>{stats(firstNarrowCol)}</span>
-        </span>
+        <Text loading={loading} className="whitespace-nowrap text-muted tabular-nums">
+          {loading ? (
+            "00% · 000/000 days"
+          ) : (
+            <>
+              <span className={hideWhenNarrow}>{stats(0)}</span>
+              <span className={hideWhenWide}>{stats(firstNarrowCol)}</span>
+            </>
+          )}
+        </Text>
       </div>
 
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-1.5 gap-y-1 text-[10px] leading-none text-muted">
-        <div />
-        <div className={cn(weekColumns, "h-[10px]")}>
-          {Array.from({ length: cols }, (_, col) => (
-            <div key={col} className={cn("min-w-0 whitespace-nowrap", col < firstNarrowCol && hideWhenNarrow)}>
-              {monthStart.get(col) ??
-                (col === 0 ? (
-                  edgeMonth(col)
-                ) : col === firstNarrowCol ? (
-                  <span className={hideWhenWide}>{edgeMonth(col)}</span>
-                ) : null)}
-            </div>
-          ))}
-        </div>
-
-        <div aria-hidden className="grid grid-rows-7 gap-[3px]">
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <span key={i} className="flex items-center justify-center">
-              {d}
-            </span>
-          ))}
-        </div>
+      {/* The graph is still laid out while loading, hidden under the block,
+          so the block is exactly its size at any drawer width. */}
+      <div
+        className="relative"
+        role={loading ? "status" : undefined}
+        aria-label={loading ? "Loading history" : undefined}
+      >
+        {loading ? <Skeleton className="absolute inset-0" /> : null}
         <div
-          role="img"
-          aria-label={
-            data
-              ? `Last ${days.length} days: done on ${all.done} of ${all.total}`
-              : "Loading history"
-          }
-          className={cn(weekColumns, "grid-rows-7")}
-          onMouseLeave={() => setHovered(null)}
-        >
-          {data ? (
-            <>
-              {Array.from({ length: offset }, (_, i) => (
-                <div key={`pad-${i}`} className={cn(firstNarrowCol > 0 && hideWhenNarrow)} />
-              ))}
-              {days.map((d, i) => {
-                const col = colOf(i);
-                return (
-                  <div
-                    key={d.date}
-                    // Touch browsers send mouseenter on tap, so a tap shows
-                    // the tooltip too.
-                    onMouseEnter={() => setHovered(i)}
-                    className={cn(
-                      "relative aspect-square border border-divider-soft",
-                      tileClass[d.status],
-                      hovered === i && "border-divider-strong",
-                      col < firstNarrowCol && hideWhenNarrow
-                    )}
-                  >
-                    {hovered === i ? (
-                      <div
-                        className={cn(
-                          "pointer-events-none absolute bottom-full z-10 mb-[5px] bg-neutral-900 px-2 py-1 text-[11px] leading-[1.3] whitespace-nowrap text-canvas shadow-lg",
-                          cols - 1 - col < TIP_FLIP_COLS ? "-right-px" : "-left-px"
-                        )}
-                      >
-                        {parseDay(d.date).toLocaleDateString(undefined, {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        <span className="text-neutral-400"> · {statusLabel[d.status]}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </>
-          ) : (
-            // Empty tiles in the final shape, so the fields below don't jump
-            // when the data lands.
-            Array.from({ length: WEEKS * 7 }, (_, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "aspect-square border border-divider-soft",
-                  tileClass.not_started,
-                  Math.floor(i / 7) < firstNarrowCol && hideWhenNarrow
-                )}
-              />
-            ))
+          aria-hidden={loading || undefined}
+          className={cn(
+            "grid grid-cols-[auto_minmax(0,1fr)] gap-x-1.5 gap-y-1 text-[10px] leading-none text-muted",
+            loading && "invisible"
           )}
+        >
+          <div />
+          <div className={cn(weekColumns, "h-[10px]")}>
+            {Array.from({ length: cols }, (_, col) => (
+              <div key={col} className={cn("min-w-0 whitespace-nowrap", col < firstNarrowCol && hideWhenNarrow)}>
+                {monthStart.get(col) ??
+                  (col === 0 ? (
+                    edgeMonth(col)
+                  ) : col === firstNarrowCol ? (
+                    <span className={hideWhenWide}>{edgeMonth(col)}</span>
+                  ) : null)}
+              </div>
+            ))}
+          </div>
+
+          <div aria-hidden className="grid grid-rows-7 gap-[3px]">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <span key={i} className="flex items-center justify-center">
+                {d}
+              </span>
+            ))}
+          </div>
+          <div
+            role="img"
+            aria-label={
+              data
+                ? `Last ${days.length} days: done on ${all.done} of ${all.total}`
+                : "History unavailable"
+            }
+            className={cn(weekColumns, "grid-rows-7")}
+            onMouseLeave={() => setHovered(null)}
+          >
+            {data ? (
+              <>
+                {Array.from({ length: offset }, (_, i) => (
+                  <div key={`pad-${i}`} className={cn(firstNarrowCol > 0 && hideWhenNarrow)} />
+                ))}
+                {days.map((d, i) => {
+                  const col = colOf(i);
+                  return (
+                    <div
+                      key={d.date}
+                      // Touch browsers send mouseenter on tap, so a tap shows
+                      // the tooltip too.
+                      onMouseEnter={() => setHovered(i)}
+                      className={cn(
+                        "relative aspect-square border border-divider-soft",
+                        tileClass[d.status],
+                        hovered === i && "border-divider-strong",
+                        col < firstNarrowCol && hideWhenNarrow
+                      )}
+                    >
+                      {hovered === i ? (
+                        <div
+                          className={cn(
+                            "pointer-events-none absolute bottom-full z-10 mb-[5px] bg-neutral-900 px-2 py-1 text-[11px] leading-[1.3] whitespace-nowrap text-canvas shadow-lg",
+                            cols - 1 - col < TIP_FLIP_COLS ? "-right-px" : "-left-px"
+                          )}
+                        >
+                          {parseDay(d.date).toLocaleDateString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                          <span className="text-neutral-400"> · {statusLabel[d.status]}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </>
+            ) : (
+              // Empty tiles in the final shape, so the fields below don't jump
+              // when the data lands. Shown only if the request failed; while
+              // loading they sit hidden under the skeleton block.
+              Array.from({ length: WEEKS * 7 }, (_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "aspect-square border border-divider-soft",
+                    tileClass.not_started,
+                    Math.floor(i / 7) < firstNarrowCol && hideWhenNarrow
+                  )}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
 
       <ul className="mt-2 mb-0 flex list-none flex-wrap justify-center gap-x-3 gap-y-1.5 p-0 text-[11px] leading-none text-muted">
         {legend.map((s) => (
           <li key={s} className="flex items-center gap-1.5">
-            <span className={cn("size-[11px] flex-none border border-divider-soft", tileClass[s])} />
-            {statusLabel[s]}
+            {loading ? (
+              // The padding stands in for the swatch and its gap.
+              <SkeletonText className="pl-[17px]">{statusLabel[s]}</SkeletonText>
+            ) : (
+              <>
+                <span className={cn("size-[11px] flex-none border border-divider-soft", tileClass[s])} />
+                {statusLabel[s]}
+              </>
+            )}
           </li>
         ))}
       </ul>

@@ -19,6 +19,11 @@ export function taskRowClass(cols: "backlog" | "today", className?: string) {
   );
 }
 
+/** Recurring rows stay on one line at every width. The streak tag is taller
+ *  than the title line, so a pixel less padding keeps the row height. */
+export const recurringRowClass =
+  "flex items-center gap-2.5 py-[calc(var(--spacing-row-y)_-_1px)] pr-row-r pl-row-l";
+
 /** Leading controls (handle, checkbox): span both lines on phones. */
 export const spanBothLines = "phone:row-[1/span_2]";
 

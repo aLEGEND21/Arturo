@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { API_BASE, Me, api, fetcher } from "@/lib/api";
 import { buttonClass } from "@/lib/ui";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "./industry";
 
 // Tighter than a standalone button: the nav is a compact strip. Labels stay
 // visible on phones too; an icon alone doesn't say what the button does.
@@ -14,7 +16,7 @@ export function Nav() {
   // The login page has no session, so nothing here would load; render
   // nothing rather than a bar full of placeholders (and no 401 bounces).
   const onLogin = usePathname() === "/login";
-  const { data: me } = useSWR<Me>(onLogin ? null : "/api/auth/me", fetcher);
+  const { data: me, error: meError } = useSWR<Me>(onLogin ? null : "/api/auth/me", fetcher);
   if (onLogin) return null;
 
   async function logout() {
@@ -94,6 +96,20 @@ export function Nav() {
             )}
             <span>Sign out</span>
           </button>
+        ) : !meError ? (
+          // Holds the button's place, so Export doesn't slide left when the
+          // account loads. The hidden label gives it the button's own size.
+          <span
+            aria-hidden="true"
+            className={cn(
+              buttonClass({ variant: "secondary", className: navButton }),
+              "relative cursor-default border-transparent text-transparent hover:bg-transparent active:bg-transparent"
+            )}
+          >
+            <Skeleton className="absolute inset-0" />
+            <span className="size-4" />
+            <span>Sign out</span>
+          </span>
         ) : null}
       </div>
     </header>

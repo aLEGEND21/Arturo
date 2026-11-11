@@ -53,6 +53,31 @@ export function Blueprint({ children, className }: { children: ReactNode; classN
   );
 }
 
+/* Placeholder block for content that hasn't loaded; size it with
+   `className`. Hidden from screen readers: whatever holds it says what is
+   loading. The shaped rows built from it are in components/skeletons.tsx. */
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("block animate-pulse bg-neutral-300 motion-reduce:animate-none", className)}
+    />
+  );
+}
+
+/* A placeholder with the exact box of a piece of text. The sample text is
+   laid out invisibly, so the width, line height and baseline are the real
+   text's, and a baseline-aligned row doesn't shift when it arrives. */
+export function SkeletonText({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    // text-transparent goes last so a color in `className` can't show the sample.
+    <span aria-hidden="true" className={cn("relative inline-block select-none", className, "text-transparent")}>
+      {children}
+      <Skeleton className="absolute inset-x-0 top-1/2 h-[0.7em] -translate-y-1/2" />
+    </span>
+  );
+}
+
 /* — tags — */
 
 const tagTones = {

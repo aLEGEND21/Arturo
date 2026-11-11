@@ -51,7 +51,7 @@ frontend/               Next.js 16 (App Router), React 19, Tailwind 4, SWR, dnd-
   src/lib/utils.ts      cn() with tailwind-merge tuned to the theme
   src/components/       industry.tsx (design primitives), today-list, task-drawer,
                         add-row, day-history, recurring-heatmap, effort-dot, context-strip, nav,
-                        task-row
+                        task-row, skeletons
   next.config.ts        /api proxy rewrites (only when API_PROXY_TARGET is set)
 docker-compose.yml      local stack: only frontend exposed on :3000
 docker-compose.prod.yml prod stack, images built in CI, joins nginx-proxy network
@@ -330,6 +330,13 @@ rollback compatibility.
 - Done tasks sink to the bottom of today for display only. Their stored
   positions don't change, and they're excluded from reorder writes
   (`openIds` in `page.tsx`).
+- **Loading states:** a list that hasn't loaded (`!data && !error`) shows
+  placeholder rows from `components/skeletons.tsx`, built on `Skeleton` /
+  `SkeletonText` in `industry.tsx`. They reuse the row recipes in
+  `task-row.ts` so nothing shifts when the data lands; change a row's layout
+  and its skeleton together. The dashboard's Suspense fallback
+  (`DashboardFallback` in `page.tsx`) is what the prerendered HTML shows
+  before hydration.
 - The task drawer autosaves the title and notes on blur and on Escape. It
   tracks the last-saved values separately because typing live-patches the
   caches.
@@ -352,7 +359,7 @@ rollback compatibility.
   Condensed headings (`font-heading`), font sizes as exact pixel values
   (`text-[14px]`). Phone inputs are 16px to stop iOS zoom.
 - Reuse the primitives: `Button`, `Field`, `Blueprint` (the framed box with
-  corner ticks), `Tag`, `OverdueTag`, `Square` (checkbox), `Seg`, and the
+  corner ticks), `Tag`, `OverdueTag`, `Square` (checkbox), `Seg`, `Skeleton`, and the
   icons in `components/industry.tsx`; `buttonClass`/`inputClass`/`kickerClass`
   in `lib/ui.ts` (also usable from server components); row layout recipes in
   `components/task-row.ts`. Merge classes with `cn()` from `lib/utils.ts`,

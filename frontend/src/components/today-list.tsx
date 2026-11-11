@@ -26,7 +26,9 @@ import { cn } from "@/lib/utils";
 import { EffortDot } from "./effort-dot";
 import { Blueprint, ClockIcon, DragDots, FlameIcon, OverdueTag, Square, Tag } from "./industry";
 import { Linkified } from "./linkified";
+import { TaskRowsSkeleton } from "./skeletons";
 import {
+  recurringRowClass,
   rowMetaClass,
   rowSubline,
   rowTextClass,
@@ -165,7 +167,8 @@ function RecurringRow({
     <div
       onClick={() => onOpen(task)}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 py-[calc(var(--spacing-row-y)_-_1px)] pr-row-r pl-row-l hover:bg-neutral-100",
+        recurringRowClass,
+        "cursor-pointer hover:bg-neutral-100",
         !isLast && "border-b border-divider"
       )}
     >
@@ -238,6 +241,7 @@ function DropZone({ id, children }: { id: string; children: ReactNode }) {
 export function TodayBoards({
   regular,
   recurring,
+  loading = false,
   addRow,
   onToggleDone,
   onOpen,
@@ -247,6 +251,9 @@ export function TodayBoards({
 }: {
   regular: Task[];
   recurring: Task[];
+  /** The today list hasn't arrived yet: both sections show placeholder rows
+   *  in place of their empty-state lines. */
+  loading?: boolean;
   addRow: ReactNode;
   onToggleDone: (t: Task) => void;
   onOpen: (t: Task) => void;
@@ -328,7 +335,9 @@ export function TodayBoards({
                   isLast={i === regular.length - 1}
                 />
               ))}
-              {regular.length === 0 ? (
+              {loading ? (
+                <TaskRowsSkeleton kind="today" />
+              ) : regular.length === 0 ? (
                 <div className="p-row-x text-[13px] text-muted">
                   Nothing on today&apos;s list yet.
                 </div>
@@ -355,7 +364,9 @@ export function TodayBoards({
                   isLast={i === recurring.length - 1}
                 />
               ))}
-              {recurring.length === 0 ? (
+              {loading ? (
+                <TaskRowsSkeleton kind="recurring" />
+              ) : recurring.length === 0 ? (
                 <div className="p-row-x text-[13px] text-muted">
                   Drag a task here to make it recurring.
                 </div>
