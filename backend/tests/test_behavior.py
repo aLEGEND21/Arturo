@@ -1,8 +1,10 @@
 """Single-user behavior that must survive the multi-user change: list
 placement, state transitions and their events, reorder, rollover."""
-from datetime import datetime
+import json
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from app.clock import logical_day_start, logical_today
 from app.jobs.maintenance import run_rollover
 
 
@@ -143,3 +145,54 @@ def test_dashboard_changes_are_tagged_in_the_event_log(alice):
         "created", "promoted", "committed", "state_changed", "completed", "state_changed", "dropped",
     ]
     assert {e["payload"]["source"] for e in events} == {"dashboard"}
+
+
+def test_heatmap_replays_each_day_from_the_event_log(alice, db):
+    """One status per logical day, oldest first: the last state event of a
+    day decides it, days with none are not started, days before the task
+    existed are absent, and today is the task's live state."""
+    tz = ZoneInfo("America/New_York")
+    today = logical_today(tz)
+    tid = make_task(alice, title="habit", recurring=True)["id"]
+
+    def at(days_ago, hours):
+        """`hours` into the logical day that started `days_ago` days back."""
+        start = logical_day_start(today - timedelta(days=days_ago), tz)
+        return (start + timedelta(hours=hours)).astimezone(timezone.utc).isoformat()
+
+    # Backdate the task to five days ago, then write the days in between.
+    db.execute("UPDATE tasks SET created_at = ? WHERE id = ?", (at(5, 1), tid))
+    db.execute("UPDATE task_events SET created_at = ? WHERE task_id = ?", (at(5, 1), tid))
+    past = [
+        (at(4, 3), "completed", {"recurring": True}),
+        (at(3, 2), "state_changed", {"from": "not_started", "to": "in_progress"}),
+        # 21 hours in is 1am on the next calendar date: still the same day.
+        (at(2, 21), "completed", {"recurring": True}),
+        # Finished, then reopened: the day ends the way it was left.
+        (at(1, 2), "completed", {"recurring": True}),
+        (at(1, 3), "state_changed", {"from": "done", "to": "not_started"}),
+    ]
+    for created_at, event_type, payload in past:
+        db.execute(
+            "INSERT INTO task_events (task_id, event_type, payload, created_at) VALUES (?, ?, ?, ?)",
+            (tid, event_type, json.dumps(payload), created_at),
+        )
+    db.commit()
+
+    days = alice.get(f"/api/tasks/{tid}/heatmap").json()
+    # 26 week columns: 25 full weeks starting on a Sunday, then this week up
+    # to today.
+    first = datetime.fromisoformat(days[0]["date"]).date()
+    assert first.weekday() == 6
+    assert len(days) == 25 * 7 + (today.weekday() + 1) % 7 + 1
+    assert [d["date"] for d in days] == [(first + timedelta(days=n)).isoformat() for n in range(len(days))]
+    assert days[-1]["date"] == today.isoformat()
+    assert {d["status"] for d in days[:-6]} == {"absent"}
+    assert [d["status"] for d in days[-6:]] == [
+        "not_started", "done", "in_progress", "done", "not_started", "not_started",
+    ]
+
+    alice.patch(f"/api/tasks/{tid}", json={"state": "in_progress"})
+    assert alice.get(f"/api/tasks/{tid}/heatmap").json()[-1]["status"] == "in_progress"
+    alice.patch(f"/api/tasks/{tid}", json={"state": "done"})
+    assert alice.get(f"/api/tasks/{tid}/heatmap").json()[-1]["status"] == "done"

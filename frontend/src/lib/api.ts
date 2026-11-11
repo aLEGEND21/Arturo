@@ -207,6 +207,16 @@ export interface DayHistory {
   tasks: HistoryTask[];
 }
 
+// How a task ended one logical day, from GET /api/tasks/{id}/heatmap.
+// "absent" is a day before the task was created.
+export type HeatmapStatus = "absent" | "not_started" | "in_progress" | "done";
+
+export interface HeatmapDay {
+  /** Logical day, "YYYY-MM-DD". */
+  date: string;
+  status: HeatmapStatus;
+}
+
 /** The signed-in user, from GET /api/auth/me. */
 export interface Me {
   id: number;

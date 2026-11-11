@@ -40,6 +40,7 @@ def test_cannot_read_another_users_task_or_events(alice, bob):
     a = make_task(alice, title="secret")
     assert bob.get(f"/api/tasks/{a['id']}").status_code == 404
     assert bob.get(f"/api/tasks/{a['id']}/events").status_code == 404
+    assert bob.get(f"/api/tasks/{a['id']}/heatmap").status_code == 404
     # Same response as an id that doesn't exist at all.
     assert bob.get("/api/tasks/999999").status_code == 404
     assert alice.get(f"/api/tasks/{a['id']}").status_code == 200
@@ -247,7 +248,8 @@ def test_owner_is_the_only_admin_and_the_environment_cannot_add_more(monkeypatch
 def test_every_data_route_requires_a_session(anon):
     routes = [
         ("get", "/api/tasks"), ("post", "/api/tasks"), ("get", "/api/tasks/1"),
-        ("get", "/api/tasks/1/events"), ("patch", "/api/tasks/1"), ("post", "/api/tasks/reorder"),
+        ("get", "/api/tasks/1/events"), ("get", "/api/tasks/1/heatmap"),
+        ("patch", "/api/tasks/1"), ("post", "/api/tasks/reorder"),
         ("get", "/api/boards"), ("post", "/api/boards"),
         ("get", "/api/rules"), ("post", "/api/rules"), ("patch", "/api/rules/1"), ("delete", "/api/rules/1"),
         ("get", "/api/context-notes"), ("post", "/api/context-notes"), ("delete", "/api/context-notes/1"),

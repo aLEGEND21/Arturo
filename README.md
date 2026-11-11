@@ -44,7 +44,10 @@ midnight, so something finished at 1am still counts for the day before
 3am expires old context notes and snoozes.
 
 Past days are rebuilt from the event log, which is what the dashboard's day
-arrows show. The Export button downloads every task as JSON.
+arrows show. A recurring task's drawer draws its last six months from the
+same log as a heatmap: one tile per day, by whether the task ended it not
+started, in progress, or done. The Export button downloads every task as
+JSON.
 
 Anyone with a Discord account can sign in. Each person gets their own tasks,
 rules, boards, notes and settings, and can't see anyone else's. Every query

@@ -35,7 +35,7 @@ backend/                FastAPI + SQLite (raw sqlite3, no ORM) + APScheduler
   app/db.py             connection, MIGRATIONS, storage caps, helpers
   app/clock.py          logical-day boundary (DAY_START_HOUR = 4)
   app/schemas.py        Pydantic request bodies, all bounded
-  app/routers/tasks.py  /api/tasks: list, create, get, events, patch, reorder
+  app/routers/tasks.py  /api/tasks: list, create, get, events, heatmap, patch, reorder
   app/routers/misc.py   boards, rules, context notes, settings, history, export
   app/jobs/maintenance.py  run_rollover, run_sweep, run_backup
   app/bot/              Discord bot: client.py (py-cord, DMs), agent.py (Claude loop), tools.py
@@ -50,7 +50,8 @@ frontend/               Next.js 16 (App Router), React 19, Tailwind 4, SWR, dnd-
   src/lib/ui.ts         class recipes (buttonClass, inputClass, kickerClass)
   src/lib/utils.ts      cn() with tailwind-merge tuned to the theme
   src/components/       industry.tsx (design primitives), today-list, task-drawer,
-                        add-row, day-history, effort-dot, context-strip, nav, task-row
+                        add-row, day-history, recurring-heatmap, effort-dot, context-strip, nav,
+                        task-row
   next.config.ts        /api proxy rewrites (only when API_PROXY_TARGET is set)
 docker-compose.yml      local stack: only frontend exposed on :3000
 docker-compose.prod.yml prod stack, images built in CI, joins nginx-proxy network
@@ -219,7 +220,13 @@ rollback compatibility.
   (`GET /api/history/{day}`) is reconstructed purely from these events, and
   `backlog_origin` is derived from the `created` event's `today` flag. When
   you add a state transition, log an event and check that `day_history` still
-  classifies it correctly.
+  classifies it correctly. The drawer's heatmap for recurring tasks
+  (`GET /api/tasks/{id}/heatmap`, 26 week columns starting on a Sunday;
+  `HEATMAP_WEEKS` is mirrored by `WEEKS` in `recurring-heatmap.tsx`)
+  replays the same log: the last
+  `completed` / `state_changed` / `dropped` event of each logical day
+  decides its tile, and today's tile is the live state (`_heat_status`,
+  mirrored by `liveStatus` in `recurring-heatmap.tsx`).
 - State side effects in `update_task`: `done` stamps `completed_at`; leaving
   `done` clears it; `dropped` clears `today_flag`.
 

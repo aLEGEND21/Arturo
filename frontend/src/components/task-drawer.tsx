@@ -22,6 +22,7 @@ import { buttonClass, inputClass, kickerClass } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 import { Blueprint, Button, CheckIcon, CloseIcon, Field, Seg, Tag } from "./industry";
 import { Linkified } from "./linkified";
+import { RecurringHeatmap } from "./recurring-heatmap";
 
 export { revalidateAll };
 
@@ -394,6 +395,8 @@ export function TaskDrawer({
               </Field>
             </div>
           ) : null}
+
+          {task.recurring ? <RecurringHeatmap task={task} /> : null}
 
           <Field label="Notes — task content">
             <NotesField

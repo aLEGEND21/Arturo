@@ -1,12 +1,13 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import CurrentUser
+from ..clock import logical_date, logical_day_start, logical_today
 from ..db import MAX_TASKS, app_timezone, db_dep, log_event, now_iso, require_room, write_lock
 from ..schemas import ReorderRequest, Source, TaskCreate, TaskUpdate
 
@@ -156,6 +157,77 @@ def task_events(task_id: int, user: CurrentUser, conn: sqlite3.Connection = Depe
         e = dict(r)
         e["payload"] = json.loads(e["payload"]) if e["payload"] else None
         out.append(e)
+    return out
+
+
+# How many week columns the per-task heatmap covers, the current week
+# included: about six months. The drawer mirrors this as WEEKS in
+# recurring-heatmap.tsx for its loading placeholder. Change both together.
+HEATMAP_WEEKS = 26
+
+
+def _heat_status(state: Optional[str]) -> str:
+    """A task state as one of the heatmap's three looks. Blocked counts as
+    started; dropped (or anything unknown) as not started."""
+    if state == "done":
+        return "done"
+    if state in ("in_progress", "blocked"):
+        return "in_progress"
+    return "not_started"
+
+
+@router.get("/{task_id}/heatmap")
+def task_heatmap(task_id: int, user: CurrentUser, conn: sqlite3.Connection = Depends(db_dep)):
+    """How one task ended each logical day of the last HEATMAP_WEEKS weeks,
+    oldest first: 'done', 'in_progress', 'not_started', or 'absent' for days
+    before the task existed. The drawer draws a recurring task's history
+    from it as a grid with one column per week, so the list starts on a
+    Sunday and ends today, partway through the last column.
+
+    Tasks only store current state, so past days are replayed from the
+    event log, as day history is. The rollover resets a recurring task every
+    morning without logging a state change, so each day starts out not
+    started and the last state event inside it decides how it ended. Days
+    are logical days (clock.py): a task finished at 1am counts for the day
+    before. Today is read from the task itself, which is the live state.
+    """
+    task = fetch_task(conn, task_id, user["id"])
+    tz = ZoneInfo(app_timezone(conn))
+    today = logical_today(tz)
+    # date.weekday() counts from Monday; the grid's weeks start on Sunday.
+    this_sunday = today - timedelta(days=(today.weekday() + 1) % 7)
+    first = this_sunday - timedelta(weeks=HEATMAP_WEEKS - 1)
+
+    rows = conn.execute(
+        """SELECT event_type, payload, created_at FROM task_events
+           WHERE task_id = ? AND created_at >= ? ORDER BY id ASC""",
+        (task_id, logical_day_start(first, tz).astimezone(timezone.utc).isoformat()),
+    ).fetchall()
+    ended: dict = {}
+    for r in rows:
+        try:
+            day = logical_date(datetime.fromisoformat(r["created_at"]), tz)
+        except ValueError:
+            continue  # a malformed timestamp from an old row only loses that event
+        if r["event_type"] == "completed":
+            ended[day] = "done"
+        elif r["event_type"] == "state_changed":
+            payload = json.loads(r["payload"]) if r["payload"] else {}
+            ended[day] = _heat_status(payload.get("to"))
+        elif r["event_type"] == "dropped":
+            ended[day] = "not_started"
+
+    try:
+        born = logical_date(datetime.fromisoformat(task["created_at"]), tz)
+    except ValueError:
+        born = first  # unreadable creation time: treat the whole window as lived
+    ended[today] = _heat_status(task["state"])
+
+    out = []
+    day = first
+    while day <= today:
+        out.append({"date": day.isoformat(), "status": "absent" if day < born else ended.get(day, "not_started")})
+        day += timedelta(days=1)
     return out
 
 
